@@ -7,6 +7,7 @@ import pytorch_lightning as pl
 from pytorch_lightning import Trainer
 from pytorch_lightning.utilities.seed import seed_everything
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
+from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.plugins import DDPPlugin
 from attrdict import AttrDict
 
@@ -32,14 +33,25 @@ class StepModule(pl.LightningModule):
         x, _ = batch
         out = self.model(x)
         loss = self.model.loss_function(out, x)
+        ###
+        # remind, it is not comfortable to use logger.log_metrics directly, 
+        # since model checkpoint check the monitered key.
+        # see change in this commit https://github.com/Lightning-AI/lightning/pull/12418/files
+        # in order to add to monitered keys (callback_metrics), you should call self.log
+        # P.S. return log will not log for you, see https://github.com/Lightning-AI/lightning/issues/5081
+        ###
+        self.log_dict({'train_loss': loss})
         return loss
 
     def validation_step(self, batch, batch_idx):
         x, _ = batch
         out = self.model(x)
         loss = self.model.loss_function(out, x)
-        return loss
+        self.log_dict({'val_loss': loss})
         # self.logger.log_metrics({f"val_{key}": val.item() for key, val in val_loss.items()})
+
+    def on_validation_end(self) -> None:
+        print("hello world")
 
     def configure_optimizers(self):
         optimizer = self.optimizer
@@ -49,6 +61,12 @@ class StepModule(pl.LightningModule):
 
 def run(config):
     seed_everything(config.seed, True)
+    wandb_logger = WandbLogger(
+        project="disentanglement",
+        save_dir=config.logging.save_dir,
+        group=f"{config.model.name}",
+    )
+
     train_set, test_set = create_datasets(config.data)
     train_loader = create_dataloader(train_set, config.train)
     test_loader = create_dataloader(test_set, config.val)
@@ -58,6 +76,7 @@ def run(config):
     step_module = StepModule(model, optimizer, scheduler)
 
     runner = Trainer(
+        logger=wandb_logger,
         callbacks=[
             LearningRateMonitor(),
             ModelCheckpoint(
@@ -68,15 +87,14 @@ def run(config):
             ),
         ],
         strategy=DDPPlugin(find_unused_parameters=False),
-        # **config["trainer_params"],
+        **config.trainer,
     )
     runner.fit(
         step_module,
         train_loader,
         test_loader,
-        max_epochs=config.trainer.max_epochs,
     )
-    print("runner:")
+    print("runner: end")
 
 
 parser = argparse.ArgumentParser(description="Generic runner for VAE models")
