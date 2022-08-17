@@ -32,26 +32,22 @@ class StepModule(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         x, _ = batch
         out = self.model(x)
-        loss = self.model.loss_function(out, x)
+        loss = self.model.loss_function(x, out)
         ###
-        # remind, it is not comfortable to use logger.log_metrics directly, 
+        # remind, it is not comfortable to use logger.log_metrics directly,
         # since model checkpoint check the monitered key.
         # see change in this commit https://github.com/Lightning-AI/lightning/pull/12418/files
         # in order to add to monitered keys (callback_metrics), you should call self.log
         # P.S. return log will not log for you, see https://github.com/Lightning-AI/lightning/issues/5081
         ###
-        self.log_dict({'train_loss': loss})
+        self.log_dict({"train_loss": loss})
         return loss
 
     def validation_step(self, batch, batch_idx):
         x, _ = batch
         out = self.model(x)
-        loss = self.model.loss_function(out, x)
-        self.log_dict({'val_loss': loss})
-        # self.logger.log_metrics({f"val_{key}": val.item() for key, val in val_loss.items()})
-
-    def on_validation_end(self) -> None:
-        print("hello world")
+        loss = self.model.loss_function(x, out)
+        self.log_dict({"val_loss": loss})
 
     def configure_optimizers(self):
         optimizer = self.optimizer
@@ -89,11 +85,7 @@ def run(config):
         strategy=DDPPlugin(find_unused_parameters=False),
         **config.trainer,
     )
-    runner.fit(
-        step_module,
-        train_loader,
-        test_loader,
-    )
+    runner.fit(step_module, train_loader, test_loader)
     print("runner: end")
 
 

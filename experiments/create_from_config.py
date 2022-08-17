@@ -2,7 +2,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from disentangling.datasets import CelebA_sets
-from disentangling.models import AE
+from disentangling.models import AE, VAE, BetaVAE
 
 
 def create_datasets(conf):
@@ -22,20 +22,19 @@ def create_dataloader(dataset, conf):
 
 def create_model(conf):
     if conf.name == "AE":
-        return AE(
-            conf.in_channels,
-            conf.in_size,
-            conf.hidden_channels,
-            conf.latent_dim,
+        return AE(conf.input_shape, conf.hidden_channels, conf.latent_dim)
+    elif conf.name == "VAE":
+        return VAE(conf.input_shape, conf.hidden_channels, conf.latent_dim)
+    elif conf.name == "BetaVAE":
+        return BetaVAE(
+            conf.input_shape, conf.hidden_channels, conf.latent_dim, conf.beta
         )
-    return
+    raise Exception(f"model {conf.name} not implemented")
 
 
 def create_optimizer(model, conf):
     return torch.optim.Adam(
-        model.parameters(),
-        lr=conf.lr,
-        weight_decay=conf.weight_decay,
+        model.parameters(), lr=conf.lr, weight_decay=conf.weight_decay
     )
 
 
