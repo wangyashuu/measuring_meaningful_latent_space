@@ -20,7 +20,7 @@ class AE(BaseAE):
             hidden_channels=hidden_channels,
         )
 
-    def forward(self, input) -> List[Tensor]:
+    def forward(self, input: Tensor) -> Tensor:
         encoder_out = self.encoder(input)
         decoder_out = self.decoder(encoder_out)
         return decoder_out

@@ -1,13 +1,17 @@
 import torch
 from torch.utils.data import DataLoader
 
-from disentangling.datasets import CelebA_sets
+from disentangling.datasets import CelebA_sets, dSprites_sets
 from disentangling.models import AE, VAE, BetaVAE
+from disentangling.metrics import mig
 
 
 def create_datasets(conf):
     if conf.name == "CelebA":
         return CelebA_sets()
+    elif conf.name == "dSprites":
+        return dSprites_sets()
+    raise Exception(f"dataset {conf.name} not implemented")
 
 
 def create_dataloader(dataset, conf):
@@ -40,3 +44,9 @@ def create_optimizer(model, conf):
 
 def create_scheduler(optimizer, conf):
     return torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=conf.gamma)
+
+
+def create_metrics(conf):
+    if 'mig' in conf.includes:
+        return {'mig': mig}
+    return {}

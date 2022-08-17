@@ -39,6 +39,11 @@ class VAE(BaseAE):
         decoded = self.decoder(z)
         return decoded, mu, logvar
 
+    def encode(self, input: Tensor) -> Tensor:
+        encoded = self.encoder(input)
+        latent_dim = encoded.shape[1] // 2
+        return encoded[:, :latent_dim]
+
     def loss_function(self, input, output) -> dict:
         decoded, mu, logvar = output
         reconstruction_loss = (

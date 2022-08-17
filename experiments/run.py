@@ -1,4 +1,3 @@
-from calendar import c
 import os
 import yaml
 import argparse
@@ -9,6 +8,7 @@ from pytorch_lightning.utilities.seed import seed_everything
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.plugins import DDPPlugin
+
 from attrdict import AttrDict
 
 
@@ -18,16 +18,18 @@ from create_from_config import (
     create_model,
     create_optimizer,
     create_scheduler,
+    create_metrics,
 )
 
 
 class StepModule(pl.LightningModule):
-    def __init__(self, model, optimizer, scheduler):
+    def __init__(self, model, optimizer, scheduler, metrics):
         super(StepModule, self).__init__()
         # self.hold_graph = self.params['retain_first_backpass'] or False
         self.model = model
         self.optimizer = optimizer
         self.scheduler = scheduler
+        self.metrics = metrics
 
     def training_step(self, batch, batch_idx):
         x, _ = batch
@@ -44,10 +46,12 @@ class StepModule(pl.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
-        x, _ = batch
+        x, y = batch
         out = self.model(x)
         loss = self.model.loss_function(x, out)
-        self.log_dict({"val_loss": loss})
+        metrics = self.metrics(y, self.model.encode(x))
+        log_metrics = {f"val_{key}": val.item() for key, val in metrics.items()}
+        self.log_dict({"val_loss": loss, **log_metrics})
 
     def configure_optimizers(self):
         optimizer = self.optimizer
@@ -69,7 +73,8 @@ def run(config):
     model = create_model(config.model)
     optimizer = create_optimizer(model, config.optimizer)
     scheduler = create_scheduler(optimizer, config.scheduler)
-    step_module = StepModule(model, optimizer, scheduler)
+    metrics = create_metrics(config.metrics)
+    step_module = StepModule(model, optimizer, scheduler, metrics)
 
     runner = Trainer(
         logger=wandb_logger,
@@ -106,6 +111,7 @@ with open(args.filename, "r") as file:
             "train": {"num_workers": 4},
             "val": {"num_workers": 4},
             "trainer": {"max_epochs": 100},
+            "metrics": {"includes": ["mig"]}
         }
     )
     config = AttrDict(yaml.safe_load(file))

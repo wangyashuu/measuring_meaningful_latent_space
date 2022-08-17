@@ -124,11 +124,11 @@ class BaseAE(nn.Module):
             # output_shape=encoder_input_shape,
         )
 
-    def encode(self, input: Tensor) -> List[Tensor]:
-        raise NotImplementedError
+    def encode(self, input: Tensor) -> Tensor:
+        return self.encoder(input)
 
     def decode(self, input: Tensor) -> Tensor:
-        raise NotImplementedError
+        return self.decoder(input)
 
     def sample(self, batch_size: int, current_device: int, **kwargs) -> Tensor:
         raise NotImplementedError
