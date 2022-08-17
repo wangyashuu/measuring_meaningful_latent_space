@@ -2,9 +2,9 @@ import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 
 
-def CelebA_sets(input_size=64):
-    trainset = datasets.CelebA(
-        root="data",
+def CelebA_sets(root="data", input_size=64):
+    train_set = datasets.CelebA(
+        root=root,
         transform=transforms.Compose(
             [
                 transforms.CenterCrop(148),
@@ -15,8 +15,8 @@ def CelebA_sets(input_size=64):
         download=True,
         split="train",
     )
-    testset = datasets.CelebA(
-        root="data",
+    test_set = datasets.CelebA(
+        root=root,
         transform=transforms.Compose(
             [
                 transforms.CenterCrop(148),
@@ -27,4 +27,4 @@ def CelebA_sets(input_size=64):
         download=True,
         split="test",
     )
-    return trainset, testset
+    return train_set, test_set
