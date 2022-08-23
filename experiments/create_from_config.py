@@ -2,9 +2,10 @@ import torch
 from torch.utils.data import DataLoader
 
 from disentangling.datasets import CelebA_sets, dSprites_sets
-from disentangling.models import AE, VAE, BetaVAE
+import disentangling.models
+
+# from disentangling.models import AE, VAE, BetaVAE, FactorVAE, BetaTCVAE
 from disentangling.metrics import mig, mig_sup
-from disentangling.models.factor_vae import FactorVAE
 
 
 def create_datasets(conf):
@@ -26,19 +27,12 @@ def create_dataloader(dataset, conf):
 
 
 def create_model(conf):
-    if conf.name == "AE":
-        return AE(conf.input_shape, conf.hidden_channels, conf.latent_dim)
-    elif conf.name == "VAE":
-        return VAE(conf.input_shape, conf.hidden_channels, conf.latent_dim)
-    elif conf.name == "BetaVAE":
-        return BetaVAE(
-            conf.input_shape, conf.hidden_channels, conf.latent_dim, conf.beta
-        )
-    elif conf.name == "FactorVAE":
-        return FactorVAE(
-            conf.input_shape, conf.hidden_channels, conf.latent_dim, conf.gamma
-        )
-    raise Exception(f"model {conf.name} not implemented")
+    name = conf.pop("name")
+    if not hasattr(disentangling.models, name):
+        raise Exception(f"model {name} not implemented")
+
+    model = getattr(disentangling.models, name)
+    return model(**conf)
 
 
 def create_optimizers(model, confs):

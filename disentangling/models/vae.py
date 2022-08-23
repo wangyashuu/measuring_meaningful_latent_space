@@ -12,6 +12,8 @@ def reparameterize(mu: Tensor, logvar: Tensor) -> Tensor:
     """
     Reparameterization trick to sample from N(mu, var) from N(0,1).
     """
+    # small note - why it compute std like this:
+    # https://stats.stackexchange.com/questions/486158/reparameterization-trick-in-vaes-how-should-we-do-this
     std = torch.exp(0.5 * logvar)
     eps = torch.randn_like(std)
     return eps * std + mu
@@ -22,7 +24,7 @@ class VAE(BaseAE):
         self,
         input_shape: Tuple[int],
         hidden_channels: List[int],
-        latent_dim: int
+        latent_dim: int,
     ) -> None:
         super().__init__(
             encoder_input_shape=input_shape,
@@ -34,7 +36,7 @@ class VAE(BaseAE):
     def forward(self, input) -> List[Tensor]:
         encoded = self.encoder(input)
         latent_dim = encoded.shape[1] // 2
-        mu, logvar = encoded[:,:latent_dim], encoded[:,latent_dim:]
+        mu, logvar = encoded[:, :latent_dim], encoded[:, latent_dim:]
         z = reparameterize(mu, logvar)
         decoded = self.decoder(z)
         return decoded, mu, logvar, z
@@ -48,7 +50,7 @@ class VAE(BaseAE):
         decoded, mu, logvar, *_ = output
         batch_size = decoded.shape[0]
         reconstruction_loss = (
-            F.mse_loss(input, decoded, reduction="sum") / batch_size 
+            F.mse_loss(input, decoded, reduction="sum") / batch_size
         )
 
         kld_loss = torch.mean(
