@@ -37,7 +37,7 @@ class VAE(BaseAE):
         mu, logvar = encoded[:,:latent_dim], encoded[:,latent_dim:]
         z = reparameterize(mu, logvar)
         decoded = self.decoder(z)
-        return decoded, mu, logvar
+        return decoded, mu, logvar, z
 
     def encode(self, input: Tensor) -> Tensor:
         encoded = self.encoder(input)
@@ -45,9 +45,10 @@ class VAE(BaseAE):
         return encoded[:, :latent_dim]
 
     def loss_function(self, input, output) -> dict:
-        decoded, mu, logvar = output
+        decoded, mu, logvar, *_ = output
+        batch_size = decoded.shape[0]
         reconstruction_loss = (
-            F.mse_loss(input, decoded, reduction="none").sum(-1).mean()
+            F.mse_loss(input, decoded, reduction="sum") / batch_size 
         )
 
         kld_loss = torch.mean(

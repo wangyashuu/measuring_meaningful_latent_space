@@ -3,7 +3,8 @@ from torch.utils.data import DataLoader
 
 from disentangling.datasets import CelebA_sets, dSprites_sets
 from disentangling.models import AE, VAE, BetaVAE
-from disentangling.metrics import mig
+from disentangling.metrics import mig, mig_sup
+from disentangling.models.factor_vae import FactorVAE
 
 
 def create_datasets(conf):
@@ -33,20 +34,32 @@ def create_model(conf):
         return BetaVAE(
             conf.input_shape, conf.hidden_channels, conf.latent_dim, conf.beta
         )
+    elif conf.name == "FactorVAE":
+        return FactorVAE(
+            conf.input_shape, conf.hidden_channels, conf.latent_dim, conf.gamma
+        )
     raise Exception(f"model {conf.name} not implemented")
 
 
-def create_optimizer(model, conf):
-    return torch.optim.Adam(
-        model.parameters(), lr=conf.lr, weight_decay=conf.weight_decay
-    )
+def create_optimizers(model, confs):
+    optimizers = []
+    for c in confs:
+        m = getattr(model, c.model) if "model" in c else model
+        o = torch.optim.Adam(
+            m.parameters(), lr=c.lr, weight_decay=c.weight_decay
+        )
+        optimizers.append(o)
+    return optimizers
 
 
-def create_scheduler(optimizer, conf):
-    return torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=conf.gamma)
+def create_schedulers(optimizers, confs):
+    return [
+        torch.optim.lr_scheduler.ExponentialLR(o, gamma=c.gamma)
+        for o, c in zip(optimizers, confs)
+    ]
 
 
 def create_metrics(conf):
-    if 'mig' in conf.includes:
-        return {'mig': mig}
+    if "mig" in conf.includes:
+        return {"mig": mig, "mig_sup": mig_sup}
     return {}

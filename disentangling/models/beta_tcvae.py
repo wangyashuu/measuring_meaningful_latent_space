@@ -7,7 +7,7 @@ from torch.nn import functional as F
 from .vae import VAE
 
 
-class BetaVAE(VAE):
+class BetaTCVAE(VAE):
     def __init__(
         self,
         input_shape: Tuple[int],
