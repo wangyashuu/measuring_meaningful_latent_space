@@ -2,8 +2,17 @@
 # https://github.com/ubisoft/ubisoft-laforge-disentanglement-metrics/blob/main/src/metrics/mig.py
 # https://github.com/rtqichen/beta-tcvae/blob/master/metric_helpers/mi_metric.py
 
-import sklearn
-import numpy as np
+import sklearn.metrics
+import torch
+
+
+def histogram(xs, bins):
+    # https://github.com/pytorch/pytorch/issues/69519
+    # Like torch.histogram, but works with cuda
+    min, max = xs.min().item(), xs.max().item()
+    # counts = torch.histc(xs, bins, min=min, max=max).to(xs.device)
+    boundaries = torch.linspace(min, max, bins + 1).to(xs.device)
+    return boundaries
 
 
 def calc_mutual_info(x, y, n_bins=20):
@@ -15,17 +24,17 @@ def calc_mutual_info(x, y, n_bins=20):
     2. implementation
     - https://stackoverflow.com/questions/20491028/optimal-way-to-compute-pairwise-mutual-information-using-numpy
     """
-    discretize = lambda a: np.digitize(a, np.histogram(a, n_bins)[1][:-1])
-    # x_bin_edges = np.histogram(x, n_bins)[1]
-    # x_discretized =
-    # y_bin_edges = np.histogram(y, n_bins)[1]
-    return sklearn.metrics.mutual_info_score(disretize(x), discretize(y))
+    # TODO: why -1
+    discretize = lambda a: torch.bucketize(a, histogram(a, n_bins)[:-1])
+    return sklearn.metrics.mutual_info_score(
+        discretize(x).cpu(), discretize(y).cpu()
+    )
 
 
 def calc_mutual_infos(codes, factors):
     n_codes = codes.shape[1]
     n_factors = factors.shape[1]
-    m = np.zeros((n_codes, n_factors))
+    m = torch.zeros(n_codes, n_factors).to(codes.device)
     for i in range(n_codes):
         for j in range(n_factors):
             m[i, j] = calc_mutual_info(codes[:, i], factors[:, j])
@@ -34,12 +43,13 @@ def calc_mutual_infos(codes, factors):
 
 def calc_entropy(factors):
     n_factors = factors.shape[1]
-    h = np.zeros(n_factors)
+    h = torch.zeros(n_factors).to(factors.device)
     for i in range(n_factors):
         h[i] = calc_mutual_info(factors[:, i], factors[:, i])
+    return h
 
 
-def mig(factors, codes):
+def mig(factors, codes, epsilon=10e-8):
     """
     Compute MIG
 
@@ -52,7 +62,10 @@ def mig(factors, codes):
     # mutual_info matrix (n_codes, n_factors)
     mutual_infos = calc_mutual_infos(codes, factors)
     # sort mi for each factor
-    sorted = np.sort(mutual_infos, axis=0)[::-1]
+    # ::-1 reverse not support: https://github.com/pytorch/pytorch/issues/59786
+    # torch.searchsorted(): input value tensor is non-contiguous https://github.com/pytorch/pytorch/issues/52743
+    # https://discuss.pytorch.org/t/contigious-vs-non-contigious-tensor/30107
+    sorted = torch.sort(mutual_infos, dim=0, descending=True)[0]
     entropy = calc_entropy(factors)
-    score = np.mean((sorted[0, :] - sorted[1, :]) / entropy)
+    score = torch.mean((sorted[0, :] - sorted[1, :]) / (entropy + epsilon))
     return score
