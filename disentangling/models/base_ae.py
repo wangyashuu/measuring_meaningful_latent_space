@@ -10,93 +10,84 @@ def conv2d_output_size(h_w, kernel_size=1, stride=1, padding=0, dilation=1):
 
     if type(kernel_size) is not tuple:
         kernel_size = (kernel_size, kernel_size)
-    h = floor(
-        (
-            (h_w[0] + (2 * padding) - (dilation * (kernel_size[0] - 1)) - 1)
-            / stride
-        )
-        + 1
+
+    compute_output_length = lambda l, kernel: floor(
+        ((l + (2 * padding) - (dilation * (kernel - 1)) - 1) / stride) + 1
     )
-    w = floor(
-        (
-            (h_w[1] + (2 * padding) - (dilation * (kernel_size[1] - 1)) - 1)
-            / stride
-        )
-        + 1
-    )
+
+    h = compute_output_length(h_w[0], kernel_size[0])
+    w = compute_output_length(h_w[1], kernel_size[1])
     return h, w
 
 
-def encoder_net(
-    input_shape: Tuple[int],
-    hidden_channels: List[int],
-    output_dim,
-):
+def get_encoder_net(input_shape: Tuple[int], hidden_channels: List[int]):
     layers = []
-    in_dim, in_size = input_shape[0], input_shape[1:]
+    n_in_channels, in_size = input_shape[0], input_shape[1:]
     # TODO question about the sequence of batch norm and activation
-    for hidden_dim in hidden_channels:
+    for n_out_channels in hidden_channels:
         layers.append(
             nn.Sequential(
                 nn.Conv2d(
-                    in_dim,
-                    out_channels=hidden_dim,
+                    n_in_channels,
+                    n_out_channels,
                     kernel_size=3,
                     stride=2,
                     padding=1,
                 ),
-                nn.BatchNorm2d(hidden_dim),
+                nn.BatchNorm2d(n_out_channels),
                 nn.LeakyReLU(),
             )
         )
-        in_dim = hidden_dim
+        n_in_channels = n_out_channels
         in_size = conv2d_output_size(
             in_size,
             kernel_size=3,
             stride=2,
             padding=1,
         )
-    layers.append(nn.Flatten(start_dim=1))
-    preflattern_size = in_size
-    layers.append(
-        nn.Linear(
-            in_dim * torch.prod(torch.tensor(preflattern_size)), output_dim
-        )
+    output_shape = (n_in_channels,) + in_size
+    return nn.Sequential(*layers), output_shape
+
+
+def get_encoder_fc(input_shape, output_dim):
+    return nn.Sequential(
+        nn.Flatten(start_dim=1),
+        nn.Linear(torch.prod(torch.tensor(input_shape)), output_dim),
     )
-    return nn.Sequential(*layers), preflattern_size
 
 
-def decoder_net(
-    input_dim: int, hidden_channels: List[int], conv_input_size: Tuple[int]
-):
+def get_decoder_fc(input_dim, output_shape):
+    return nn.Sequential(
+        nn.Linear(input_dim, torch.prod(torch.tensor(output_shape))),
+        nn.Unflatten(1, output_shape),
+    )
+
+
+def get_decoder_net(input_shape: Tuple[int], hidden_channels: List[int]):
     layers = []
-    in_dim = hidden_channels[0]
-    layers.append(
-        nn.Linear(input_dim, in_dim*torch.prod(torch.tensor(conv_input_size)))
-    )
-    layers.append(torch.nn.Unflatten(1, (in_dim,) + conv_input_size))
-    for hidden_dim in hidden_channels:
+    n_in_channels, in_size = input_shape[0], input_shape[1:]
+    for n_out_channels in hidden_channels:
         layers.append(
             nn.Sequential(
                 nn.ConvTranspose2d(
-                    in_dim,
-                    out_channels=hidden_dim,
+                    n_in_channels,
+                    n_out_channels,
                     kernel_size=3,
                     stride=2,
                     padding=1,
                     output_padding=1,
                 ),
-                nn.BatchNorm2d(hidden_dim),
+                nn.BatchNorm2d(n_out_channels),
                 nn.LeakyReLU(),
             )
         )
-        in_dim = hidden_dim
+        n_in_channels = n_out_channels
+
     layers.append(
         nn.Sequential(
-            nn.ConvTranspose2d(in_dim, in_dim, kernel_size=3, padding=1),
-            nn.BatchNorm2d(in_dim),
-            nn.LeakyReLU(),
-            nn.Conv2d(in_dim, out_channels=3, kernel_size=3, padding=1),
+            nn.Conv2d(
+                n_in_channels, n_in_channels, kernel_size=3, padding="same"
+            ),
             nn.Tanh(),
         )
     )
@@ -106,29 +97,33 @@ def decoder_net(
 class BaseAE(nn.Module):
     def __init__(
         self,
-        encoder_input_shape,
-        encoder_output_dim,
-        decoder_input_dim,
+        input_shape,
         hidden_channels,
     ) -> None:
         super().__init__()
-        self.encoder, preflattern_size = encoder_net(
-            input_shape=encoder_input_shape,
-            hidden_channels=hidden_channels,
-            output_dim=encoder_output_dim,
+        encoder_net, encoded_shape = get_encoder_net(
+            input_shape, hidden_channels
         )
-        self.decoder = decoder_net(
-            input_dim=decoder_input_dim,
-            conv_input_size=preflattern_size,
-            hidden_channels=hidden_channels[::-1],
-            # output_shape=encoder_input_shape,
+        decoder_net = get_decoder_net(
+            input_shape=encoded_shape,
+            hidden_channels=hidden_channels[::-1] + [input_shape[0]],
         )
+        self.encoder_net = encoder_net
+        self.encoded_shape = encoded_shape
+        self.decoder_net = decoder_net
 
     def encode(self, input: Tensor) -> Tensor:
-        return self.encoder(input)
+        encoded = self.encoder_net(input)
+        return encoded
 
     def decode(self, input: Tensor) -> Tensor:
-        return self.decoder(input)
+        decoded = self.decoder_net(input)
+        return decoded
+
+    def forward(self, input: Tensor) -> Tensor:
+        encoded = self.encoder_net(input)
+        decoded = self.decoder_net(encoded)
+        return decoded
 
     def sample(self, batch_size: int, current_device: int, **kwargs) -> Tensor:
         raise NotImplementedError
