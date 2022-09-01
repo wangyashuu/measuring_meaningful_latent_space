@@ -18,11 +18,12 @@ class AE(BaseAE):
         latent_dim: int,
     ) -> None:
         super().__init__(input_shape, hidden_channels)
+        encoded_shape = self.encoded_shape
         self.encoder_fc = get_encoder_fc(
-            input_shape=self.encoded_shape, output_dim=latent_dim
+            input_shape=encoded_shape, output_dim=latent_dim
         )
         self.decoder_fc = get_decoder_fc(
-            input_dim=latent_dim, output_shape=self.encoded_shape
+            input_dim=latent_dim, output_shape=encoded_shape
         )
 
     def encode(self, input: Tensor) -> Tensor:
@@ -43,7 +44,7 @@ class AE(BaseAE):
         return decoded
 
     def loss_function(
-        self, input: Tensor, output: Union[Tensor, List[Tensor]], **kwargs
+        self, input: Tensor, output: Union[Tensor, List[Tensor]], *args
     ) -> dict:
         decoded = output
         batch_size = decoded.shape[0]

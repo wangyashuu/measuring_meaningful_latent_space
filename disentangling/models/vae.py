@@ -34,7 +34,7 @@ class VAE(BaseAE):
             input_dim=latent_dim, output_shape=self.encoded_shape
         )
 
-    def forward(self, input) -> List[Tensor]:
+    def forward(self, input: Tensor) -> List[Tensor]:
         encoded = self.encoder_net(input)
         encoded = self.encoder_fc(encoded)
         latent_dim = encoded.shape[1] // 2
@@ -53,8 +53,9 @@ class VAE(BaseAE):
     def decode(self, input: Tensor) -> Tensor:
         decoded = self.decoder_fc(input)
         decoded = self.decoder_net(decoded)
+        return decoded
 
-    def loss_function(self, input, output) -> dict:
+    def loss_function(self, input: Tensor, output: Tensor, *args) -> dict:
         decoded, mu, logvar, *_ = output
         batch_size = decoded.shape[0]
         reconstruction_loss = (
@@ -66,4 +67,8 @@ class VAE(BaseAE):
             dim=0,
         )
         loss = reconstruction_loss + kld_loss
-        return loss
+        return dict(
+            loss=loss,
+            reconstruction_loss=reconstruction_loss,
+            kld_loss=kld_loss,
+        )

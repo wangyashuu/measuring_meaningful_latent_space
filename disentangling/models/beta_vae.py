@@ -1,7 +1,7 @@
 from typing import List, Tuple, Union
 
 import torch
-from torch import nn, Tensor
+from torch import Tensor
 from torch.nn import functional as F
 
 from .vae import VAE
@@ -19,7 +19,7 @@ class BetaVAE(VAE):
         self.beta = beta
 
     def loss_function(
-        self, input: Tensor, output: Union[Tensor, List[Tensor]], **kwargs
+        self, input: Tensor, output: Union[Tensor, List[Tensor]], *args
     ) -> dict:
         decoded, mu, logvar, *_ = output
         batch_size = decoded.shape[0]
@@ -32,4 +32,8 @@ class BetaVAE(VAE):
             dim=0,
         )
         loss = reconstruction_loss + self.beta * kld_loss
-        return loss
+        return dict(
+            loss=loss,
+            reconstruction_loss=reconstruction_loss,
+            kld_loss=kld_loss,
+        )

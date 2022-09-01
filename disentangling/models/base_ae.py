@@ -101,16 +101,19 @@ class BaseAE(nn.Module):
         hidden_channels,
     ) -> None:
         super().__init__()
+
+        n_channels_list = [input_shape[0]] + hidden_channels
         encoder_net, encoded_shape = get_encoder_net(
-            input_shape, hidden_channels
+            input_shape, hidden_channels=n_channels_list[1:]
         )
+
         decoder_net = get_decoder_net(
             input_shape=encoded_shape,
-            hidden_channels=hidden_channels[::-1] + [input_shape[0]],
+            hidden_channels=n_channels_list[::-1][1:],
         )
         self.encoder_net = encoder_net
-        self.encoded_shape = encoded_shape
         self.decoder_net = decoder_net
+        self.encoded_shape = encoded_shape
 
     def encode(self, input: Tensor) -> Tensor:
         encoded = self.encoder_net(input)
