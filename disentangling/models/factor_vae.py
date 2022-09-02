@@ -26,7 +26,7 @@ class FactorVAE(VAE):
         input_shape: Tuple[int],
         hidden_channels: List[int],
         latent_dim: int,
-        gamma: float,
+        tc_loss_factor: float,
         discriminator_dims: List[int] = [1000, 1000, 1000],
     ) -> None:
         super().__init__(input_shape, hidden_channels, latent_dim)
@@ -47,7 +47,7 @@ class FactorVAE(VAE):
             nn.LeakyReLU(0.2),
             nn.Linear(1000, 2),
         )
-        self.gamma = gamma
+        self.tc_loss_factor = tc_loss_factor
 
     def vae_loss_function(self, input, output):
         decoded, mu, logvar, z = output
@@ -70,11 +70,15 @@ class FactorVAE(VAE):
         # log(D(z) / 1 - D(z)) = logit_qz - logit_q̄z
         ###
         tc_loss = torch.mean(z_logits[:, 0] - z_logits[:, 1])
-        loss = reconstruction_loss + kld_loss + self.gamma * tc_loss
-        return loss
+        loss = reconstruction_loss + kld_loss + self.tc_loss_factor * tc_loss
+        return dict(
+            loss=loss,
+            reconstruction_loss=reconstruction_loss,
+            kld_loss=kld_loss,
+            tc_loss=tc_loss,
+        )
 
     def discriminator_loss_function(self, input, output):
-        # TODO: what for?
         batch_size = input.shape[0]
         ones = torch.ones(
             batch_size,
@@ -98,14 +102,14 @@ class FactorVAE(VAE):
             F.cross_entropy(z_logits, zeros)
             + F.cross_entropy(z_permuted_logits, ones)
         )
-        return loss
+        return dict(discriminator_loss=loss)
 
     def loss_function(
         self,
         input: Tensor,
         output: Union[Tensor, List[Tensor]],
         optimizer_idx: int = 0,
-        **kwargs
+        *args
     ) -> dict:
         if optimizer_idx == self.optimize_VAE:
             return self.vae_loss_function(input, output)
