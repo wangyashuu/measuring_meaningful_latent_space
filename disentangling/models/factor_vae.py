@@ -93,16 +93,16 @@ class FactorVAE(VAE):
             device=input.device,
         )
         decoded, mu, logvar, z = output
-        z = z.detach()  # TODO: really? Detach so that VAE is not trained again
+        # z = z.detach()  # TODO: really? Detach so that VAE is not trained again
         z_permuted = permute_latent(z)
         z_logits = self.discriminator(z)
         z_permuted_logits = self.discriminator(z_permuted)
         # encourage z_logit to zero (z_prob[0] to be one)
-        loss = 0.5 * (
-            F.cross_entropy(z_logits, zeros)
-            + F.cross_entropy(z_permuted_logits, ones)
+        discriminator_loss = 0.5 * (
+            F.cross_entropy(z_logits, zeros) # => encourage [1, 0]
+            + F.cross_entropy(z_permuted_logits, ones) # encourage [0, 1]
         )
-        return dict(discriminator_loss=loss)
+        return dict(discriminator_loss=discriminator_loss)
 
     def loss_function(
         self,
