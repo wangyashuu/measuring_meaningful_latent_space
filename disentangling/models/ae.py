@@ -52,4 +52,4 @@ class AE(BaseAE):
             F.mse_loss(input, decoded, reduction="sum") / batch_size
         )
         loss = reconstruction_loss
-        return loss
+        return dict(loss=loss)

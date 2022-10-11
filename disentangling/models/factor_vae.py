@@ -13,7 +13,6 @@ def permute_latent(z):
     for i in range(n_latent_dim):
         permuted_ids = torch.randperm(z.shape[0]).to(z.device)
         permuted[:, i] = z[permuted_ids, i]
-
     return permuted
 
 
