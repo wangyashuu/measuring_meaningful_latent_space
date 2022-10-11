@@ -93,7 +93,7 @@ class FactorVAE(VAE):
             device=input.device,
         )
         decoded, mu, logvar, z = output
-        # z = z.detach()  # TODO: really? Detach so that VAE is not trained again
+        z = z.detach()  # Detach so that VAE is not trained again
         z_permuted = permute_latent(z)
         z_logits = self.discriminator(z)
         z_permuted_logits = self.discriminator(z_permuted)

@@ -1,7 +1,3 @@
-# https://github.com/google-research/disentanglement_lib/blob/86a644d4ed35c771560dc3360756363d35477357/disentanglement_lib/evaluation/metrics/mig.py
-# https://github.com/ubisoft/ubisoft-laforge-disentanglement-metrics/blob/main/src/metrics/mig.py
-# https://github.com/rtqichen/beta-tcvae/blob/master/metric_helpers/mi_metric.py
-
 import sklearn.metrics
 import torch
 
@@ -15,7 +11,7 @@ def histogram(xs, bins):
     return boundaries
 
 
-def calc_mutual_info(x, y, n_bins=20):
+def calc_mutual_info(x, y, n_bins=30, x_discretized=True, y_discretized=False):
     """
     more info about calc mutual info:
     1. calculate mutual info between float
@@ -25,9 +21,12 @@ def calc_mutual_info(x, y, n_bins=20):
     - https://stackoverflow.com/questions/20491028/optimal-way-to-compute-pairwise-mutual-information-using-numpy
     """
     # TODO: why -1
+    # discretize = lambda a: torch.tensor(np_discretize(a.numpy(), n_bins))
     discretize = lambda a: torch.bucketize(a, histogram(a, n_bins)[:-1])
+    normalized_x = discretize(x) if x_discretized else x
+    normalized_y = discretize(y) if y_discretized else y
     return sklearn.metrics.mutual_info_score(
-        discretize(x).cpu(), discretize(y).cpu()
+        normalized_x.detach().cpu(), normalized_y.detach().cpu()
     )
 
 
@@ -45,7 +44,12 @@ def calc_entropy(factors):
     n_factors = factors.shape[1]
     h = torch.zeros(n_factors).to(factors.device)
     for i in range(n_factors):
-        h[i] = calc_mutual_info(factors[:, i], factors[:, i])
+        h[i] = calc_mutual_info(
+            factors[:, i],
+            factors[:, i],
+            x_discretized=False,
+            y_discretized=False,
+        )
     return h
 
 
@@ -61,6 +65,8 @@ def mig(factors, codes, epsilon=10e-8):
     """
     # mutual_info matrix (n_codes, n_factors)
     mutual_infos = calc_mutual_infos(codes, factors)
+    print("important! mutual_infos:")
+    print(mutual_infos)
     # sort mi for each factor
     # ::-1 reverse not support: https://github.com/pytorch/pytorch/issues/59786
     # torch.searchsorted(): input value tensor is non-contiguous https://github.com/pytorch/pytorch/issues/52743

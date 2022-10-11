@@ -5,7 +5,7 @@ from disentangling.datasets import CelebA_sets, dSprites_sets
 import disentangling.models
 
 # from disentangling.models import AE, VAE, BetaVAE, FactorVAE, BetaTCVAE
-from disentangling.metrics import mig, mig_sup
+import disentangling.metrics
 
 
 def create_datasets(conf):
@@ -54,6 +54,7 @@ def create_schedulers(optimizers, confs):
 
 
 def create_metrics(conf):
-    if "mig" in conf.includes:
-        return {"mig": mig, "mig_sup": mig_sup}
-    return {}
+    return [
+        getattr(disentangling.metrics, metric_name)
+        for metric_name in conf.includes
+    ]

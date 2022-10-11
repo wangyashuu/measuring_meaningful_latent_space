@@ -1,9 +1,14 @@
 model:
-  name: "FactorVAE"
+  name: "DIPVAE"
   input_shape: [3, 64, 64]
-  latent_dim: 64
+  latent_dim: 128
   hidden_channels: [16, 64, 256]
-  tc_loss_factor: 10
+  # dip_type: "i"
+  # lambda_d_factor: 10
+  # lambda_od: 10
+  dip_type: "ii"
+  lambda_d_factor: 1
+  lambda_od: 10
 
 data:
   name: "CelebA"
@@ -17,18 +22,14 @@ val:
 optimizers:
   - lr: 0.0001
     weight_decay: 0.0
-  - lr: 0.0003
-    model: "discriminator"
-    weight_decay: 0.0
 
 schedulers:
-  - gamma: 0.95
   - gamma: 0.95
 
 trainer:
   accelerator: "gpu"
   devices: [1, 3, 4, 5, 6]
-  max_epochs: 8
+  max_epochs: 4
 
 logging:
   save_dir: "logs/"
@@ -36,4 +37,4 @@ logging:
 metrics:
   includes: ["mig"]
 
-seed: 12
+seed: 1265

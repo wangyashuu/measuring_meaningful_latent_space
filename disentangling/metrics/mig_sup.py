@@ -1,14 +1,10 @@
-# https://github.com/google-research/disentanglement_lib/blob/86a644d4ed35c771560dc3360756363d35477357/disentanglement_lib/evaluation/metrics/mig.py
-# https://github.com/ubisoft/ubisoft-laforge-disentanglement-metrics/blob/main/src/metrics/mig.py
-# https://github.com/rtqichen/beta-tcvae/blob/master/metric_helpers/mi_metric.py
-
 import torch
 
 from .mig import *
 
 def mig_sup(factors, codes, epsilon=10e-8):
     """
-    Compute MIG
+    Compute MIG-sup
 
     Args:
         factors: the real generative factors (batch_size, factor_dims).
