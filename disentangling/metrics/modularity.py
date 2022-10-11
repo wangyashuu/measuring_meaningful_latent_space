@@ -1,5 +1,5 @@
 import torch
-from disentangling.metrics.mig import calc_mutual_infos
+from .mig import calc_mutual_infos
 
 
 """
