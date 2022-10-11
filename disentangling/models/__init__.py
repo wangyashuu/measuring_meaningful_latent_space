@@ -6,6 +6,7 @@ from .factor_vae import FactorVAE
 from .beta_tcvae import BetaTCVAE
 from .info_vae import InfoVAE
 from .dip_vae import DIPVAE
+from .vq_vae import VQVAE
 
 __all__ = [
     "AE",
@@ -15,4 +16,5 @@ __all__ = [
     "BetaTCVAE",
     "InfoVAE",
     "DIPVAE",
+    "VQVAE"
 ]
