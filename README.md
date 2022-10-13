@@ -1,4 +1,6 @@
-# Install
+# Innvariant-Representations
+
+## Install
 ```shell
 python3 -m venv .venv
 source .venv/bin/activate
