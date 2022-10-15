@@ -2,6 +2,7 @@ import os
 import yaml
 import argparse
 
+import torch
 import pytorch_lightning as pl
 from pytorch_lightning import Trainer
 from pytorch_lightning.utilities.seed import seed_everything
@@ -11,9 +12,11 @@ from pytorch_lightning.callbacks import (
     Callback,
 )
 from pytorch_lightning.loggers import WandbLogger
-from pytorch_lightning.plugins import DDPPlugin
+from pytorch_lightning.strategies.ddp import DDPStrategy
 
 from attrdict import AttrDict
+import torchvision.utils as vutils
+from torch.utils.data import DataLoader
 
 
 from create_from_config import (
@@ -26,18 +29,41 @@ from create_from_config import (
 )
 
 
+def get_data_from_dataset(dataset, size):
+    loader = DataLoader(dataset, batch_size=size, shuffle=True)
+    return next(iter(loader))
+
+
+def get_data_from_dataloader(loader, size):
+    xs, ys = [], []
+    s = 0
+    for x, y in loader:
+        if s + x.shape[0] >= size:
+            xs.append(x[: (size - s)])
+            ys.append(y[: (size - s)])
+            s += x.shape[0]
+            break
+        else:
+            xs.append(x)
+            ys.append(y)
+            s += x.shape[0]
+    return torch.vstack(xs), torch.vstack(ys)
+
+
 class StepModule(pl.LightningModule):
-    def __init__(self, model, optimizers, schedulers):
+    def __init__(self, model, optimizers, schedulers, metrics, test_data):
         super().__init__()
         # self.hold_graph = self.params['retain_first_backpass'] or False
         self.model = model
         self.optimizers = optimizers
         self.schedulers = schedulers
+        self.metrics = metrics
+        self.test_data = test_data
 
-    def training_step(self, batch, batch_idx, optimizer_idx):
+    def training_step(self, batch, batch_idx, optimizer_idx=0):
         x, _ = batch
         out = self.model(x)
-        loss = self.model.loss_function(x, out, optimizer_idx)
+        losses = self.model.loss_function(x, out, optimizer_idx)
         ###
         # remind, it is not comfortable to use logger.log_metrics directly,
         # since model checkpoint check the monitered key.
@@ -45,19 +71,53 @@ class StepModule(pl.LightningModule):
         # in order to add to monitered keys (callback_metrics), you should call self.log
         # P.S. return log will not log for you, see https://github.com/Lightning-AI/lightning/issues/5081
         ###
-        self.log_dict({"train_loss": loss})
-        return loss
+        self.log_dict({f"train/{k}": v for k, v in losses.items()})
+        loss = losses.get("loss") or next(iter(losses.values()))
+        return dict(loss=loss)
 
     def validation_step(self, batch, batch_idx):
-        x, _ = batch
+        x, y = batch
         out = self.model(x)
-        loss = self.model.loss_function(x, out)
-        self.log_dict({"val_loss": loss})
+        losses = self.model.loss_function(x, out)
+        y_hat = self.model.encode(x)
+        self.log_dict(
+            {f"val/{k}": v for k, v in losses.items()}, sync_dist=True
+        )
+        loss = losses.get("loss") or next(iter(losses.values()))
+        if len(y.shape) == 1:
+            y = y.reshape(-1, 1)
+        return dict(loss=loss, y_hat=y_hat, y=y)
+
+    def validation_epoch_end(self, step_outs):
+        # https://github.com/Lightning-AI/lightning/issues/13166#issuecomment-1196478740
+        # torch.distributed.get_rank() or pl.utilities.rank_zero.rank_zero_only.rank
+        y_hat = torch.vstack([o["y_hat"] for o in step_outs])
+        y = torch.vstack([o["y"] for o in step_outs])
+        log_metrics = {fn.__name__: fn(y, y_hat) for fn in self.metrics}
+        self.log_dict(log_metrics, sync_dist=True)
+        self.samples()
+        self.reconstructs()
 
     def configure_optimizers(self):
         optimizers = self.optimizers
         schedulers = self.schedulers
         return optimizers, schedulers
+
+    def samples(self):
+        latents = torch.randn((144,) + self.model.latent_space).to(self.device)
+        samples = self.model.decode(latents)
+        image = vutils.make_grid(samples, normalize=False, nrow=12)
+        self.logger.log_image(key="samples", images=[image])
+
+    def reconstructs(self):
+        x, _ = self.test_data
+        x = x.to(self.device)
+        result = self.model(x)
+        reconstructions = result[0] if type(result) == tuple else result
+        image = vutils.make_grid(reconstructions, normalize=False, nrow=12)
+        self.logger.log_image(key="reconstructions", images=[image])
+        x_image = vutils.make_grid(x, normalize=False, nrow=12)
+        self.logger.log_image(key="originals", images=[x_image])
 
 
 class MetricsCallback(Callback):
@@ -66,29 +126,26 @@ class MetricsCallback(Callback):
         self.data_loader = data_loader
         self.metrics = metrics
 
-    def on_fit_end(self, trainer, pl_module):
-        x, y = next(iter(self.data_loader))
-        encoded = pl_module.model.encode(x)
-        log_metrics = {k: fn(y, encoded) for k, fn in self.metrics.items()}
-       #  pl_module.log_dict(log_metrics)
-
 
 def run(config):
     seed_everything(config.seed, True)
-    # wandb auto set project name based on git (not documented), see: https://github.com/wandb/wandb/blob/cce611e2e518951064833b80aee975fa139a85ee/wandb/cli/cli.py#L872
+    # wandb auto set project name based on git (not documented)
+    # see: https://github.com/wandb/wandb/blob/cce611e2e518951064833b80aee975fa139a85ee/wandb/cli/cli.py#L872
     wandb_logger = WandbLogger(
         save_dir=config.logging.save_dir,
         group=f"{config.model.name}",
+        config=config,
     )
 
     train_set, test_set = create_datasets(config.data)
+    test_data = get_data_from_dataset(test_set, size=144)
     train_loader = create_dataloader(train_set, config.train)
     test_loader = create_dataloader(test_set, config.val)
     model = create_model(config.model)
     optimizers = create_optimizers(model, config.optimizers)
     schedulers = create_schedulers(optimizers, config.schedulers)
     metrics = create_metrics(config.metrics)
-    step_module = StepModule(model, optimizers, schedulers)
+    step_module = StepModule(model, optimizers, schedulers, metrics, test_data)
 
     runner = Trainer(
         logger=wandb_logger,
@@ -97,12 +154,11 @@ def run(config):
             ModelCheckpoint(
                 save_top_k=2,
                 dirpath=os.path.join(config.logging.save_dir, "checkpoints"),
-                monitor="val_loss",
+                monitor="val/loss",
                 save_last=True,
             ),
-            # MetricsCallback(data_loader=test_loader, metrics=metrics)
         ],
-        strategy=DDPPlugin(find_unused_parameters=False),
+        strategy=DDPStrategy(find_unused_parameters=False),
         # detect_anomaly=True,
         **config.trainer,
     )
@@ -128,6 +184,7 @@ with open(args.filename, "r") as file:
             "val": {"num_workers": 4},
             "trainer": {"max_epochs": 4},
             "metrics": {"includes": []},
+            "model": {"net_type": "cnn"},
         }
     )
     config = AttrDict(yaml.safe_load(file))

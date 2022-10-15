@@ -1,5 +1,6 @@
-from .CelebA import CelebA_sets
-from .dSprites import dSprites_sets
+from .CelebA import CelebA
+from .dSprites import dSprites
+from .MNIST import MNIST
 
 
-__all__ = ["CelebA_sets", "dSprites_sets"]
+__all__ = ["CelebA", "dSprites", "MNIST"]
