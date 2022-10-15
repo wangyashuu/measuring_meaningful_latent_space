@@ -1,8 +1,7 @@
-from sys import flags
 from typing import List, Tuple, Union
 
 import torch
-from torch import nn, Tensor
+from torch import Tensor, nn
 from torch.nn import functional as F
 
 from .vae import VAE
@@ -55,8 +54,10 @@ def log_importance_weight_matrix(batch_size, dataset_size):
 class BetaTCVAE(VAE):
     def __init__(
         self,
-        input_shape: Tuple[int],
-        hidden_channels: List[int],
+        encoder: nn.Module,
+        decoder: nn.Module,
+        encoder_output_shape: Tuple,
+        decoder_input_shape: Tuple,
         latent_dim: int,
         mutual_info_loss_factor: float,
         tc_loss_factor: float,
@@ -65,8 +66,13 @@ class BetaTCVAE(VAE):
         val_set_size: int,
         minibatch_stratified_sampling: bool = False,
     ) -> None:
-        super().__init__(input_shape, hidden_channels, latent_dim)
-
+        super().__init__(
+            encoder,
+            decoder,
+            encoder_output_shape,
+            decoder_input_shape,
+            latent_dim,
+        )
         #  reconstruction_loss
         #     + self.alpha * mutual_info_loss
         #     + self.beta * tc_loss

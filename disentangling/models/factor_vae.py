@@ -22,13 +22,22 @@ class FactorVAE(VAE):
 
     def __init__(
         self,
-        input_shape: Tuple[int],
-        hidden_channels: List[int],
+        encoder: nn.Module,
+        decoder: nn.Module,
+        encoder_output_shape: Tuple,
+        decoder_input_shape: Tuple,
         latent_dim: int,
         tc_loss_factor: float,
+        # TODO: use this parameters
         discriminator_dims: List[int] = [1000, 1000, 1000],
     ) -> None:
-        super().__init__(input_shape, hidden_channels, latent_dim)
+        super().__init__(
+            encoder,
+            decoder,
+            encoder_output_shape,
+            decoder_input_shape,
+            latent_dim,
+        )
         ###
         # learn to the density ratio needed for estimating TC.
         # output[0] an the probability that its input is a sample from q(z) rather than ̄q(z).
@@ -54,10 +63,9 @@ class FactorVAE(VAE):
         reconstruction_loss = (
             F.mse_loss(input, decoded, reduction="sum") / batch_size
         )
-        kld_loss = torch.mean(
-            -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=-1),
-            dim=0,
-        )
+        kld_loss = (
+            -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+        ) / batch_size
         z_logits = self.discriminator(z)
         ###
         # D(z) is the prob of the input from q(z) rather than from ̄q(z)
@@ -98,8 +106,8 @@ class FactorVAE(VAE):
         z_permuted_logits = self.discriminator(z_permuted)
         # encourage z_logit to zero (z_prob[0] to be one)
         discriminator_loss = 0.5 * (
-            F.cross_entropy(z_logits, zeros) # => encourage [1, 0]
-            + F.cross_entropy(z_permuted_logits, ones) # encourage [0, 1]
+            F.cross_entropy(z_logits, zeros)  # => encourage [1, 0]
+            + F.cross_entropy(z_permuted_logits, ones)  # encourage [0, 1]
         )
         return dict(discriminator_loss=discriminator_loss)
 

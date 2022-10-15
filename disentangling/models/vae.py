@@ -1,59 +1,73 @@
-from base64 import encode
 from typing import List, Tuple
 
 import torch
 from torch import nn, Tensor
 from torch.nn import functional as F
 
-from .base_ae import BaseAE, get_encoder_fc, get_decoder_fc
+from .ae import AE
 
 
 def reparameterize(mu: Tensor, logvar: Tensor) -> Tensor:
     """
     Reparameterization trick to sample from N(mu, var) from N(0,1).
     """
-    # small note - why it compute std like this:
+    # small note for why it compute std like this:
     # https://stats.stackexchange.com/questions/486158/reparameterization-trick-in-vaes-how-should-we-do-this
     std = torch.exp(0.5 * logvar)
     eps = torch.randn_like(std)
     return eps * std + mu
 
 
-class VAE(BaseAE):
+class VAE(AE):
     def __init__(
         self,
-        input_shape: Tuple[int],
-        hidden_channels: List[int],
+        encoder: nn.Module,
+        decoder: nn.Module,
+        encoder_output_shape: Tuple,
+        decoder_input_shape: Tuple,
         latent_dim: int,
     ) -> None:
-        super().__init__(input_shape, hidden_channels)
-        self.encoder_fc = get_encoder_fc(
-            input_shape=self.encoded_shape, output_dim=latent_dim * 2
+        super().__init__(encoder, decoder)
+        # compatible layer between encoder and latent space
+        self.post_encoder = nn.Sequential(
+            nn.Flatten(start_dim=1),
+            nn.Linear(
+                torch.prod(torch.tensor(encoder_output_shape)), latent_dim * 2
+            ),
         )
-        self.decoder_fc = get_decoder_fc(
-            input_dim=latent_dim, output_shape=self.encoded_shape
+        # compatible layer between decoder and latent space
+        self.pre_decoder = nn.Sequential(
+            nn.Linear(
+                latent_dim, torch.prod(torch.tensor(decoder_input_shape))
+            ),
+            nn.Unflatten(1, decoder_input_shape),
         )
+        self.latent_dim = latent_dim
 
-    def forward(self, input: Tensor) -> List[Tensor]:
-        encoded = self.encoder_net(input)
-        encoded = self.encoder_fc(encoded)
-        latent_dim = encoded.shape[1] // 2
-        mu, logvar = encoded[:, :latent_dim], encoded[:, latent_dim:]
-        z = reparameterize(mu, logvar)
-        decoded = self.decoder_fc(z)
-        decoded = self.decoder_net(decoded)
-        return decoded, mu, logvar, z
+    @property
+    def latent_space(self):
+        return (self.latent_dim,)
 
     def encode(self, input: Tensor) -> Tensor:
-        encoded = self.encoder_net(input)
-        encoded = self.encoder_fc(encoded)
+        encoded = self.encoder(input)
+        encoded = self.post_encoder(encoded)
         latent_dim = encoded.shape[1] // 2
         return encoded[:, :latent_dim]
 
     def decode(self, input: Tensor) -> Tensor:
-        decoded = self.decoder_fc(input)
-        decoded = self.decoder_net(decoded)
+        decoded = self.pre_decoder(input)
+        decoded = self.decoder(decoded)
         return decoded
+
+    def forward(self, input: Tensor) -> List[Tensor]:
+        encoded = self.encoder(input)
+        encoded = self.post_encoder(encoded)
+        latent_dim = encoded.shape[1] // 2
+        mu, logvar = encoded[:, :latent_dim], encoded[:, latent_dim:]
+        z = reparameterize(mu, logvar)
+        decoded = self.pre_decoder(z)
+        decoded = self.decoder(decoded)
+        return decoded, mu, logvar, z
 
     def loss_function(self, input: Tensor, output: Tensor, *args) -> dict:
         decoded, mu, logvar, *_ = output
@@ -61,11 +75,10 @@ class VAE(BaseAE):
         reconstruction_loss = (
             F.mse_loss(input, decoded, reduction="sum") / batch_size
         )
+        kld_loss = (
+            -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+        ) / batch_size
 
-        kld_loss = torch.mean(
-            -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=-1),
-            dim=0,
-        )
         loss = reconstruction_loss + kld_loss
         return dict(
             loss=loss,

@@ -1,46 +1,30 @@
-from typing import List, Tuple, Union
+from typing import List, Union
 
-from torch import Tensor
+from torch import Tensor, nn
 from torch.nn import functional as F
 
-from .base_ae import (
-    BaseAE,
-    get_encoder_fc,
-    get_decoder_fc,
-)
 
 
-class AE(BaseAE):
-    def __init__(
-        self,
-        input_shape: Tuple[int],
-        hidden_channels: List[int],
-        latent_dim: int,
-    ) -> None:
-        super().__init__(input_shape, hidden_channels)
-        encoded_shape = self.encoded_shape
-        self.encoder_fc = get_encoder_fc(
-            input_shape=encoded_shape, output_dim=latent_dim
-        )
-        self.decoder_fc = get_decoder_fc(
-            input_dim=latent_dim, output_shape=encoded_shape
-        )
+
+class AE(nn.Module):
+    def __init__(self, encoder: nn.Module, decoder: nn.Module) -> None:
+        super().__init__()
+        self.encoder = encoder
+        self.decoder = decoder
+
+    # TODO: latent_space
 
     def encode(self, input: Tensor) -> Tensor:
-        encoded = self.encoder_net(input)
-        encoded = self.encoder_fc(encoded)
+        encoded = self.encoder(input)
         return encoded
 
     def decode(self, input: Tensor) -> Tensor:
-        decoded = self.decoder_fc(input)
-        decoded = self.decoder_net(decoded)
+        decoded = self.decoder(input)
         return decoded
 
     def forward(self, input: Tensor) -> Tensor:
-        encoded = self.encoder_net(input)
-        encoded = self.encoder_fc(encoded)
-        decoded = self.decoder_fc(encoded)
-        decoded = self.decoder_net(decoded)
+        encoded = self.encoder(input)
+        decoded = self.decoder(encoded)
         return decoded
 
     def loss_function(

@@ -44,15 +44,23 @@ class InfoVAE(VAE):
 
     def __init__(
         self,
-        input_shape: Tuple[int],
-        hidden_channels: List[int],
+        encoder: nn.Module,
+        decoder: nn.Module,
+        encoder_output_shape: Tuple,
+        decoder_input_shape: Tuple,
         latent_dim: int,
         alpha: float,
         gamma: float,
         kernel_type: str = "imq",
         kernel_sigma: float = 1.0,
     ) -> None:
-        super().__init__(input_shape, hidden_channels, latent_dim)
+        super().__init__(
+            encoder,
+            decoder,
+            encoder_output_shape,
+            decoder_input_shape,
+            latent_dim,
+        )
         self.kernel_type = kernel_type
         self.kernel_sigma = kernel_sigma
         # TODO: refactor
@@ -70,11 +78,9 @@ class InfoVAE(VAE):
         reconstruction_loss = (
             F.mse_loss(input, decoded, reduction="sum") / batch_size
         )
-
-        kld_loss = torch.mean(
-            -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=-1),
-            dim=0,
-        )
+        kld_loss = (
+            -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+        ) / batch_size
 
         z_posterior = z
         z_prior = torch.randn_like(z, device=z.device)

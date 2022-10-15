@@ -1,18 +1,18 @@
-from base64 import encode
 from typing import List, Tuple
 
 import torch
 from torch import nn, Tensor
 from torch.nn import functional as F
 
-from .base_ae import BaseAE
+from .ae import AE
+from ..utils.nn import conv2d_output_size
 
 
 class VectorQuantizer(nn.Module):
     def __init__(
         self,
         n_embeddings: int,
-        n_embedding_dim: int,
+        n_embedding_dims: int,
         commitment_loss_factor: float,
         ema_enabled: bool = True,
         ema_decay: float = 0.99,
@@ -20,15 +20,15 @@ class VectorQuantizer(nn.Module):
     ):
         super().__init__()
         self.n_embeddings = n_embeddings
-        self.n_embedding_dim = n_embedding_dim
-        self.codebook = nn.Embedding(n_embeddings, n_embedding_dim)
+        self.n_embedding_dims = n_embedding_dims
+        self.codebook = nn.Embedding(n_embeddings, n_embedding_dims)
         self.commitment_loss_factor = commitment_loss_factor
         self.ema_enabled = ema_enabled
         if ema_enabled:
             self.codebook.weight.data.normal_()
             self.register_buffer("ema_cluster_size", torch.zeros(n_embeddings))
             self.ema_w = nn.Parameter(
-                torch.Tensor(n_embeddings, n_embedding_dim)
+                torch.Tensor(n_embeddings, n_embedding_dims)
             )
             self.ema_w.data.normal_()
             self.ema_decay = ema_decay
@@ -63,11 +63,11 @@ class VectorQuantizer(nn.Module):
 
     def forward(self, inputs):
         embeddings = self.codebook.weight
-        n_embeddings, n_embedding_dim = embeddings.shape
+        n_embeddings, n_embedding_dims = embeddings.shape
 
-        latents = inputs.permute(0, 2, 3, 1).contiguous()  # BCHW -> BHWC
+        latents = inputs.permute(0, 2, 3, 1).contiguous()  # BDHW -> BHWD
         latents_shape = latents.shape
-        flattened = latents.view(-1, n_embedding_dim)  # => (BHW, D)
+        flattened = latents.view(-1, n_embedding_dims)  # => (BHW, D)
 
         distances = (
             torch.sum(flattened**2, dim=1, keepdim=True)
@@ -101,7 +101,7 @@ class VectorQuantizer(nn.Module):
         return embedding_loss + commitment_loss
 
 
-class VQVAE(BaseAE):
+class VQVAE(AE):
     """
     https://github.com/deepmind/sonnet/blob/v2/sonnet/src/nets/vqvae.py
     https://colab.research.google.com/github/zalandoresearch/pytorch-vq-vae/blob/master/vq-vae.ipynb#scrollTo=F5hOFwiBmPPh
@@ -109,33 +109,74 @@ class VQVAE(BaseAE):
 
     def __init__(
         self,
-        input_shape: Tuple[int],
-        hidden_channels: List[int],
-        n_embeddings,
-        n_embedding_dim,
+        encoder: nn.Module,
+        decoder: nn.Module,
+        encoder_output_shape: Tuple,
+        decoder_input_shape: Tuple,
+        n_embedding_dims: int,
+        n_embeddings: int,
         commitment_loss_factor,
         ema_enabled: bool = True,
         ema_decay: float = 0.99,
         ema_epsilon: float = 1e-5,
     ) -> None:
-        super().__init__(input_shape, hidden_channels)
+        super().__init__(encoder, decoder)
+        self.post_encoder = nn.Conv2d(
+            in_channels=encoder_output_shape[0],
+            out_channels=n_embedding_dims,
+            kernel_size=1,
+            stride=1,
+            padding=1,
+        )
+        out_size, output_padding = conv2d_output_size(
+            encoder_output_shape[1:],
+            kernel_size=1,
+            stride=1,
+            padding=1,
+        )
+        self.pre_decoder = nn.ConvTranspose2d(
+            in_channels=n_embedding_dims,
+            out_channels=decoder_input_shape[0],
+            kernel_size=1,
+            stride=1,
+            padding=1,
+            output_padding=output_padding,
+        )
         self.quantizer = VectorQuantizer(
             n_embeddings,
-            n_embedding_dim,
+            n_embedding_dims,
             ema_enabled,
             ema_decay,
             ema_epsilon,
             commitment_loss_factor,
         )
-        self.codebook = nn.Embedding(n_embeddings, n_embedding_dim)
-
+        self.codebook = nn.Embedding(n_embeddings, n_embedding_dims)
         self.commitment_loss_factor = commitment_loss_factor
+        self.encoder_output_shape = encoder_output_shape
 
-    def forward(self, inputs) -> List[Tensor]:
-        encoded = self.encoder_net(inputs)  # (B, D, H, W)
+    @property
+    def latent_space(self):
+        return (self.n_embedding_dims,) + self.encoder_output_shape[1:]
+
+    def encode(self, inputs: Tensor) -> Tensor:
+        encoded = self.encoder(inputs)  # (B, D, H, W)
+        encoded = self.post_encoder(encoded)
         quantizer_outputs = self.quantizer(encoded)
         quantized, *_ = quantizer_outputs
-        decoded = self.decoder_net(quantized)
+        return quantized  # (B, D, H, W)
+
+    def decode(self, inputs: Tensor) -> Tensor:
+        decoded = self.pre_decoder(inputs)
+        decoded = self.decoder(decoded)
+        return decoded
+
+    def forward(self, inputs) -> List[Tensor]:
+        encoded = self.encoder(inputs)  # (B, D, H, W)
+        encoded = self.post_encoder(encoded)
+        quantizer_outputs = self.quantizer(encoded)
+        quantized, *_ = quantizer_outputs
+        decoded = self.pre_decoder(quantized)
+        decoded = self.decoder(decoded)
         return decoded, quantizer_outputs
 
     def loss_function(self, input, output, *args) -> dict:
@@ -149,3 +190,5 @@ class VQVAE(BaseAE):
         return dict(
             loss=loss, reconstruction_loss=reconstruction_loss, vq_loss=vq_loss
         )
+
+    # TODO: sample

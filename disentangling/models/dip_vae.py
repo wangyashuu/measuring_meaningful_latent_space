@@ -10,14 +10,22 @@ from .vae import VAE
 class DIPVAE(VAE):
     def __init__(
         self,
-        input_shape: Tuple[int],
-        hidden_channels: List[int],
+        encoder: nn.Module,
+        decoder: nn.Module,
+        encoder_output_shape: Tuple,
+        decoder_input_shape: Tuple,
         latent_dim: int,
         dip_type: str = "i",
         lambda_od: float = 1.0,
         lambda_d_factor: float = 1.0,
     ) -> None:
-        super().__init__(input_shape, hidden_channels, latent_dim)
+        super().__init__(
+            encoder,
+            decoder,
+            encoder_output_shape,
+            decoder_input_shape,
+            latent_dim,
+        )
         self.dip_type = dip_type
         self.lambda_od = lambda_od
         self.lambda_d_factor = lambda_d_factor
@@ -30,11 +38,9 @@ class DIPVAE(VAE):
         reconstruction_loss = (
             F.mse_loss(input, decoded, reduction="sum") / batch_size
         )
-
-        kld_loss = torch.mean(
-            -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=-1),
-            dim=0,
-        )
+        kld_loss = (
+            -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+        ) / batch_size
         expectation_mu_mu_t = (mu[:, :, None] @ mu[:, None, :]).mean(0)
         expectation_mu = mu.mean(0)
         # TODO: how to compute covariance
@@ -55,8 +61,9 @@ class DIPVAE(VAE):
             raise NotImplementedError("DIP variant not supported.")
         diag = torch.diagonal(target_cov, offset=0, dim1=-2, dim2=-1)
         off_diag = diag - torch.diag_embed(diag, offset=0, dim1=-2, dim2=-1)
-        dip_loss = self.lambda_od * torch.sum(off_diag**2) \
-            + lambda_d * torch.sum((diag - 1) ** 2)
+        dip_loss = self.lambda_od * torch.sum(
+            off_diag**2
+        ) + lambda_d * torch.sum((diag - 1) ** 2)
 
         loss = reconstruction_loss + kld_loss + dip_loss
         return dict(

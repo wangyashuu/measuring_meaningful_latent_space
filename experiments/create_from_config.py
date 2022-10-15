@@ -1,19 +1,24 @@
 import torch
 from torch.utils.data import DataLoader
 
-from disentangling.datasets import CelebA_sets, dSprites_sets
+import disentangling.datasets
 import disentangling.models
-
-# from disentangling.models import AE, VAE, BetaVAE, FactorVAE, BetaTCVAE
 import disentangling.metrics
+
+from disentangling.utils.nn import (
+    fc_encoder,
+    fc_decoder,
+    cnn_decoder,
+    cnn_encoder,
+)
 
 
 def create_datasets(conf):
-    if conf.name == "CelebA":
-        return CelebA_sets()
-    elif conf.name == "dSprites":
-        return dSprites_sets()
-    raise Exception(f"dataset {conf.name} not implemented")
+    name = conf.pop("name")
+    D = getattr(disentangling.datasets, name)
+    if not hasattr(disentangling.datasets, name):
+        raise Exception(f"dataset {name} not implemented")
+    return D(**conf)
 
 
 def create_dataloader(dataset, conf):
@@ -21,18 +26,42 @@ def create_dataloader(dataset, conf):
         dataset,
         batch_size=conf.batch_size,
         num_workers=conf.num_workers,
-        # shuffle=True,
+        shuffle=conf.shuffle,
         # pin_memory=conf.pin_memory,
     )
 
 
 def create_model(conf):
     name = conf.pop("name")
+    net_type = conf.pop("net_type")
+    input_shape = conf.pop("input_shape")
+    hiddens = conf.pop("hiddens")
+    if net_type == "fc":
+        encoder = fc_encoder(input_shape=input_shape, hiddens=hiddens)
+        decoder = fc_decoder(hiddens=hiddens[::-1], output_shape=input_shape)
+        encoder_output_shape = (hiddens[-1],)
+    else:
+        encoder, encoder_output_shape, output_paddings = cnn_encoder(
+            input_shape=input_shape,
+            hiddens=hiddens,
+        )
+        decoder = cnn_decoder(
+            hiddens=hiddens[::-1],
+            output_paddings=output_paddings[::-1],
+            output_shape=input_shape,
+        )
+
     if not hasattr(disentangling.models, name):
         raise Exception(f"model {name} not implemented")
 
     model = getattr(disentangling.models, name)
-    return model(**conf)
+    return model(
+        encoder=encoder,
+        decoder=decoder,
+        encoder_output_shape=encoder_output_shape,
+        decoder_input_shape=encoder_output_shape,
+        **conf,
+    )
 
 
 def create_optimizers(model, confs):
