@@ -1,6 +1,7 @@
 from typing import List, Tuple
 
 import torch
+import torch.distributed
 from torch import nn, Tensor
 from torch.nn import functional as F
 
@@ -16,7 +17,7 @@ class VectorQuantizer(nn.Module):
         commitment_loss_factor: float,
         ema_enabled: bool = True,
         ema_decay: float = 0.99,
-        ema_epsilon=1e-5,
+        ema_epsilon: float = 1e-5,
     ):
         super().__init__()
         self.n_embeddings = n_embeddings
@@ -39,23 +40,31 @@ class VectorQuantizer(nn.Module):
             )
 
     def update_embeddings(self, encoded_one_hot, flattened):
+        """
+        Args:
+            encoded_one_hot: (BHW, n_embeddings)
+            flattened: (BHW, n_embedding_dims)
+        """
         decay = self.ema_decay
         epsilon = self.ema_epsilon
-        n_embeddings = self.codebook.weight.shape[0]
+        n_embeddings = self.n_embeddings
 
-        self.ema_cluster_size = self.ema_cluster_size * decay + (
-            1 - decay
-        ) * torch.sum(encoded_one_hot, 0)
+        cluster_size = torch.sum(encoded_one_hot, 0) # (D, )
+        torch.distributed.all_reduce(cluster_size)
+        self.ema_cluster_size = (
+            self.ema_cluster_size * decay + (1 - decay) * cluster_size
+        )
 
         # Laplace smoothing of the cluster size
-        n = torch.sum(self.ema_cluster_size.data)
+        n = torch.sum(self.ema_cluster_size)
         self.ema_cluster_size = (
             (self.ema_cluster_size + epsilon)
             / (n + n_embeddings * epsilon)
             * n
         )
 
-        dw = encoded_one_hot.t() @ flattened
+        dw = encoded_one_hot.t() @ flattened # (n_embeddings, n_embedding_dims)
+        torch.distributed.all_reduce(dw)
         self.ema_w = nn.Parameter(self.ema_w * decay + (1 - decay) * dw)
         self.codebook.weight = nn.Parameter(
             self.ema_w / self.ema_cluster_size.unsqueeze(1)
@@ -87,16 +96,24 @@ class VectorQuantizer(nn.Module):
         if self.ema_enabled and self.training:
             self.update_embeddings(encoded_one_hot, flattened)
 
-        return quantized, latents, quantized_latents
+        return (
+            quantized,
+            latents,
+            quantized_latents,
+            encoded_one_hot,
+            flattened,
+        )
 
     def compute_loss(self, outputs):
-        _, latents, quantized_latents = outputs
+        _, latents, quantized_latents, encoded_one_hot, flattened = outputs
         # Compute the VQ Losses TODO: what is the different here.
         commitment_loss = self.commitment_loss_factor * F.mse_loss(
             quantized_latents.detach(), latents
         )
-        if not self.ema_enabled:
+
+        if self.ema_enabled:
             return commitment_loss
+        # quantization loss?
         embedding_loss = F.mse_loss(quantized_latents, latents.detach())
         return embedding_loss + commitment_loss
 
@@ -118,7 +135,7 @@ class VQVAE(AE):
         commitment_loss_factor,
         ema_enabled: bool = True,
         ema_decay: float = 0.99,
-        ema_epsilon: float = 1e-5,
+        ema_epsilon: float = 1e-8,
     ) -> None:
         super().__init__(encoder, decoder)
         self.post_encoder = nn.Conv2d(
@@ -126,37 +143,38 @@ class VQVAE(AE):
             out_channels=n_embedding_dims,
             kernel_size=1,
             stride=1,
-            padding=1,
+            padding=0,
         )
         out_size, output_padding = conv2d_output_size(
             encoder_output_shape[1:],
             kernel_size=1,
             stride=1,
-            padding=1,
+            padding=0,
         )
         self.pre_decoder = nn.ConvTranspose2d(
             in_channels=n_embedding_dims,
             out_channels=decoder_input_shape[0],
             kernel_size=1,
             stride=1,
-            padding=1,
+            padding=0,
             output_padding=output_padding,
         )
         self.quantizer = VectorQuantizer(
-            n_embeddings,
-            n_embedding_dims,
-            ema_enabled,
-            ema_decay,
-            ema_epsilon,
-            commitment_loss_factor,
+            n_embeddings=n_embeddings,
+            n_embedding_dims=n_embedding_dims,
+            commitment_loss_factor=commitment_loss_factor,
+            ema_enabled=ema_enabled,
+            ema_decay=ema_decay,
+            ema_epsilon=ema_epsilon,
         )
-        self.codebook = nn.Embedding(n_embeddings, n_embedding_dims)
+        self.n_embedding_dims = n_embedding_dims
         self.commitment_loss_factor = commitment_loss_factor
-        self.encoder_output_shape = encoder_output_shape
+        print("out_size", out_size)
+        self.encoder_output_size = out_size
 
     @property
     def latent_space(self):
-        return (self.n_embedding_dims,) + self.encoder_output_shape[1:]
+        return (self.n_embedding_dims,) + self.encoder_output_size
 
     def encode(self, inputs: Tensor) -> Tensor:
         encoded = self.encoder(inputs)  # (B, D, H, W)
@@ -180,12 +198,12 @@ class VQVAE(AE):
         return decoded, quantizer_outputs
 
     def loss_function(self, input, output, *args) -> dict:
-        decoded, quantizer_output = output
+        decoded, quantizer_outputs = output
         batch_size = decoded.shape[0]
         reconstruction_loss = (
             F.mse_loss(input, decoded, reduction="sum") / batch_size
         )
-        vq_loss = self.quantizer.compute_loss(quantizer_output)
+        vq_loss = self.quantizer.compute_loss(quantizer_outputs)
         loss = reconstruction_loss + vq_loss
         return dict(
             loss=loss, reconstruction_loss=reconstruction_loss, vq_loss=vq_loss

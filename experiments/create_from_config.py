@@ -26,7 +26,7 @@ def create_dataloader(dataset, conf):
         dataset,
         batch_size=conf.batch_size,
         num_workers=conf.num_workers,
-        shuffle=conf.shuffle,
+        shuffle=conf.pop('shuffle', False),
         # pin_memory=conf.pin_memory,
     )
 
