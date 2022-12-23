@@ -1,15 +1,8 @@
+import math
 import numpy as np
-import pytest
-from scipy.sparse import csr_matrix
 
 from sklearn.utils import check_random_state
 from .mi import mutual_info
-
-
-def get_variance(arr):
-    if len(arr.shape) == 1 or (len(arr.shape) == 2 and arr.shape[1] == 1):
-        return np.var(arr)
-    return np.linalg.det(np.cov(arr.T))
 
 
 def test_compute_mi_cc():
@@ -41,8 +34,8 @@ def test_compute_mi_cc():
     # first figures after decimal point match.
     for n_neighbors in [3, 5, 7]:
         I_computed = mutual_info(X, y, n_neighbors=n_neighbors)
-        print("hello", I_computed, I_theory)
-    # assert_almost_equal(I_computed, I_theory, 1)
+        assert math.isclose(I_computed, I_theory, abs_tol=0.03)
+
 
 
 def test_compute_mi_cd():
@@ -82,4 +75,4 @@ def test_compute_mi_cd():
             I_computed = mutual_info(
                 X, y, discrete_y=True, n_neighbors=n_neighbors
             )
-            print("hello", I_computed, I_theory)
+            assert math.isclose(I_computed, I_theory, abs_tol=0.03)
