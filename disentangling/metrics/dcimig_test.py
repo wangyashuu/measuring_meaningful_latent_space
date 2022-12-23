@@ -21,9 +21,9 @@ def test_m0c1_duplicated_factors():
 
 def test_m1c0():
     score = run_metric(dcimig, m1c0)
-    assert math.isclose(score, 1, abs_tol=0.05)
+    assert math.isclose(score, 1, abs_tol=0.2)
 
 
 def test_m1c1():
     score = run_metric(dcimig, m1c1)
-    assert math.isclose(score, 1, abs_tol=0.05)
+    assert math.isclose(score, 1, abs_tol=0.2)

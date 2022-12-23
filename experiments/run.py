@@ -14,12 +14,13 @@ from pytorch_lightning.callbacks import (
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.strategies.ddp import DDPStrategy
 
-from attrdict import AttrDict
+
+from box import Box
 import torchvision.utils as vutils
 from torch.utils.data import DataLoader
 
 
-from create_from_config import (
+from .create_from_config import (
     create_datasets,
     create_dataloader,
     create_model,
@@ -178,7 +179,7 @@ parser.add_argument(
 args = parser.parse_args()
 
 with open(args.filename, "r") as file:
-    default_config = AttrDict(
+    default_config = Box(
         {
             "train": {"num_workers": 4},
             "val": {"num_workers": 4},
@@ -187,5 +188,5 @@ with open(args.filename, "r") as file:
             "model": {"net_type": "cnn"},
         }
     )
-    config = AttrDict(yaml.safe_load(file))
+    config = Box(yaml.safe_load(file))
     run(default_config + config)

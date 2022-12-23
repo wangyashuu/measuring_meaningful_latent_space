@@ -1,5 +1,6 @@
 import sklearn.metrics
 import torch
+import numpy as np
 
 
 def histogram(xs, bins):
@@ -11,7 +12,14 @@ def histogram(xs, bins):
     return boundaries
 
 
-def calc_mutual_info(x, y, n_bins=30, x_discretized=True, y_discretized=False):
+
+def np_discretize(xs, n_bins=30):
+    """Discretization based on histograms."""
+    discretized = np.digitize(xs, np.histogram(xs, n_bins)[1][:-1])
+    return discretized
+
+
+def calc_mutual_info(x, y, n_bins=50, x_discretized=True, y_discretized=False):
     """
     more info about calc mutual info:
     1. calculate mutual info between float
@@ -21,8 +29,8 @@ def calc_mutual_info(x, y, n_bins=30, x_discretized=True, y_discretized=False):
     - https://stackoverflow.com/questions/20491028/optimal-way-to-compute-pairwise-mutual-information-using-numpy
     """
     # TODO: why -1
-    # discretize = lambda a: torch.tensor(np_discretize(a.numpy(), n_bins))
-    discretize = lambda a: torch.bucketize(a, histogram(a, n_bins)[:-1])
+    discretize = lambda a: torch.tensor(np_discretize(a.cpu().numpy(), n_bins))
+    # discretize = lambda a: torch.bucketize(a, histogram(a, n_bins)[:-1])
     normalized_x = discretize(x) if x_discretized else x
     normalized_y = discretize(y) if y_discretized else y
     return sklearn.metrics.mutual_info_score(
@@ -40,15 +48,15 @@ def calc_mutual_infos(codes, factors):
     return m
 
 
-def calc_entropy(factors):
+def calc_entropy(factors, discretized=False):
     n_factors = factors.shape[1]
     h = torch.zeros(n_factors).to(factors.device)
     for i in range(n_factors):
         h[i] = calc_mutual_info(
             factors[:, i],
             factors[:, i],
-            x_discretized=False,
-            y_discretized=False,
+            x_discretized=discretized,
+            y_discretized=discretized,
         )
     return h
 
