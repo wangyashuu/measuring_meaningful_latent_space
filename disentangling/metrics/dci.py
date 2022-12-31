@@ -20,8 +20,8 @@ def dci(factors, codes):
         scores: Dictionary with average disentanglement score, completeness and
         informativeness (train and test).
     """
-    factors = factors.numpy()
-    codes = codes.numpy()
+    factors = factors.cpu().numpy()
+    codes = codes.cpu().numpy()
     batch_size = factors.shape[0]
     train_size = int(batch_size * 0.8)
     x_train, y_train = codes[:train_size, :].T, factors[:train_size, :].T
@@ -41,6 +41,9 @@ def _compute_dci(mus_train, ys_train, mus_test, ys_test):
     scores["informativeness_test"] = test_err
     scores["disentanglement"] = disentanglement(importance_matrix)
     scores["completeness"] = completeness(importance_matrix)
+    scores["i"] = test_err
+    scores["d"] = disentanglement(importance_matrix)
+    scores["c"] = completeness(importance_matrix)
     return scores
 
 
@@ -54,7 +57,7 @@ def compute_importance_gbt(x_train, y_train, x_test, y_test):
     train_loss = []
     test_loss = []
     for i in range(num_factors):
-        model = ensemble.GradientBoostingRegressor()
+        model = ensemble.GradientBoostingClassifier()
         model.fit(x_train.T, y_train[i, :])
         importance_matrix[:, i] = np.abs(model.feature_importances_)
         train_loss.append(np.mean(model.predict(x_train.T) == y_train[i, :]))
