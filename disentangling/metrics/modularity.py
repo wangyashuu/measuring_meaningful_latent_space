@@ -9,6 +9,7 @@ Based on "Learning Deep Disentangled Embeddings With the F-Statistic Loss"
 Adapted from: https://github.com/google-research/disentanglement_lib
 """
 
+
 def modularity(factors, codes):
     """Computes the modularity from mutual information."""
     # Mutual information has shape [num_codes, num_factors].
