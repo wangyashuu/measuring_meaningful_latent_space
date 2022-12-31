@@ -1,15 +1,83 @@
 import torch
 from sklearn.decomposition import PCA
+import numpy as np
 
-# representation_functions
+"""
+representation_functions
+m1: a code capture no more than one factor
+c1: a factor is captured by no more than one code
+"""
 
 
-def m0c0(factors):
-    latents = torch.zeros_like(factors)
+def m0c0i0(factors):
+    latents = generate_factors(factors.shape[0], factors.shape[1])
     return latents
 
 
-def m0c1(factors):
+def m0c0i1(factors):
+    # TODO
+    pass
+
+
+def m0c1i0(factors):
+    # m0: BUT a code capture more than one factor
+    # c1: a factor is captured by no more than one code
+    # by duplicated factors + modify code to loss info
+    n_factors_per_latent = 2
+    n_factors_half = factors.shape[1] // n_factors_per_latent
+    original = factors[:, :n_factors_half]
+    factors[:, n_factors_half:] = original
+    latents = torch.clone(original)
+    means = latents.float().mean(0)
+    latents[latents < means] = -1
+    return latents
+
+
+def m0c1i1(factors):
+    # m0: BUT a code capture more than one factor
+    # c1: a factor is captured by no more than one code
+    # by duplicated factors
+    n_factors_per_latent = 2
+    n_factors_half = factors.shape[1] // n_factors_per_latent
+    original = factors[:, :n_factors_half]
+    factors[:, n_factors_half:] = original
+    latents = original
+    return latents
+
+
+def m1c0i0(factors):
+    # m1: a code capture no more than one factor
+    # c0: BUT a factor is captured by more than one code
+    # by duplicated codes + modify code to loss info
+    x = factors
+    latents = torch.hstack([x, x])
+    means = latents.float().mean(0)
+    latents[latents < means] = -1
+    return latents
+
+
+def m1c0i1(factors):
+    # m1: a code capture no more than one factor
+    # c0: BUT a factor is captured by more than one code
+    # by duplicated codes
+    x = factors
+    latents = torch.hstack([x, x])
+    return latents
+
+
+def m1c1i0(factors):
+    latents = torch.clone(factors)
+    means = latents.float().mean(0)
+    latents[latents < means] = -1
+    return latents
+
+
+def m1c1i1(factors):
+    latents = torch.clone(factors)
+    return latents
+
+
+def m0c1_PCA(factors):
     batch_size, n_factors = factors.shape
     n_factors_per_latent = 2
     n_latents = n_factors // n_factors_per_latent
@@ -24,37 +92,19 @@ def m0c1(factors):
         ).reshape(-1)
     return latents
 
-def m0c1_duplicated_factors(factors):
-    batch_size, n_factors = factors.shape
-    n_factors_per_latent = 2
-    n_latents = n_factors // n_factors_per_latent
-    latents = factors[:, :n_latents]
-    factors[:, n_latents:] = latents
-    return latents
-
-def m1c0(factors):
-    x = torch.clone(factors)
-    latents = torch.hstack([x, x])
-    return latents
-
-
-def m1c1(factors):
-    latents = torch.clone(factors)
-    return latents
-
 
 def generate_factors(batch_size, n_factor_dims, mu=0, sigma=10):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    factors = (
-        torch.normal(mu, sigma, size=(batch_size, n_factor_dims))
-        .int()
-        .to(device)
-    )
-    return factors
+    size = (batch_size, n_factor_dims)
+    factors = np.random.normal(mu, sigma, size).astype(int)
+    return torch.from_numpy(factors)
 
 
-def run_metric(metric, representation_function, batch_size=12000):
+def run_metric(metric, representation_function, batch_size=12000, n_factors=8):
     factors = generate_factors(batch_size, n_factor_dims=4)
     latents = representation_function(factors)
     score = metric(factors, latents)
-    return score.cpu()
+    if torch.is_tensor(score):
+        return score.cpu()
+    elif type(score) is dict and torch.is_tensor(next(iter(score.values()))):
+        return {k: score[k].cpu() for k in score}
+    return score
