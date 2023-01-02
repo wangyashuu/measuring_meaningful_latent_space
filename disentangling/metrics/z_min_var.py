@@ -15,11 +15,6 @@ def z_min_var(
 
     size, n_codes = global_codes.shape
     active_dims = global_variances > 0
-    # subset_size = int(size * subset_percentage)
-    # subset_indices = np.random.choice(size, subset_size)
-    # train_size = int(subset_size * 0.7)
-    # train_factors = factors[subset_indices[:train_size]]
-    # test_factors = factors[subset_indices[train_size:]]
 
     train_votes = get_votes(
         n_votes,
@@ -82,4 +77,5 @@ def get_votes(
         )
 
         votes[fixed_index, argmin] += 1
+
     return votes
