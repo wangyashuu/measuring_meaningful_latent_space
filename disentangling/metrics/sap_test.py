@@ -16,8 +16,8 @@ from .sap import sap
 
 
 def test_m0c0i0():
-    score = run_metric(sap, m0c0i0)  # 0
-    assert math.isclose(score, 0, abs_tol=0.2)
+    score = run_metric(sap, m0c0i0)
+    assert math.isclose(score, 0, abs_tol=0.2)  # 0
 
 
 def test_m0c0i1():
