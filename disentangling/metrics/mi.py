@@ -1,9 +1,11 @@
 import numpy as np
+import torch
 from sklearn.feature_selection import mutual_info_regression
 from entropy_estimators import continuous
 
 from scipy.special import digamma
 from sklearn.neighbors import NearestNeighbors, KDTree
+
 
 """
 adapted from https://github.com/scikit-learn/scikit-learn/blob/82df48934eba1df9a1ed3be98aaace8eada59e6e/sklearn/feature_selection/_mutual_info.py#
@@ -19,16 +21,15 @@ True mutual information is non-negative, the return value will get the max bewte
 
 
 def atleast_2d(arr):
+    if torch.is_tensor(arr):
+        arr = arr.cpu().numpy()
     if len(arr.shape) == 1:
         return arr.reshape(arr.shape[0], 1)
     return arr
 
 
 def mutual_info_cc(X, y, n_neighbors=3):
-    X = atleast_2d(X)
-    y = atleast_2d(y)
     n = X.shape[0]
-
     Xy = np.c_[X, y]
 
     # Here we rely on NearestNeighbors to select the fastest algorithm.
@@ -59,13 +60,12 @@ def mutual_info_cc(X, y, n_neighbors=3):
 
 def mutual_info_cd(X, y, n_neighbors=3):
     n_samples = X.shape[0]
-
     radius = np.empty(n_samples)
     label_counts = np.empty(n_samples)
     k_all = np.empty(n_samples)
     nn = NearestNeighbors()
-    for label in np.unique(y):
-        mask = y == label
+    for label in np.unique(y, axis=0):
+        mask = (y == label).all(axis=1)
         count = np.sum(mask)
         if count > 1:
             k = min(n_neighbors, count - 1)
@@ -100,8 +100,33 @@ def mutual_info_cd(X, y, n_neighbors=3):
     return max(0, mi)
 
 
-def mutual_info(X, y, discrete_y=False, n_neighbors=3):
+#             codes (c)    factors (d)
+# I(C; z)     vector       var                c_vector vs d_var
+# I(c; z)     var          var                c_var vs d_var
+# I(c; Z)     var          vector             c_var vs d_vector
+
+#             codes (c)    factors (c)
+# I(C; z)     vector       var                c_vector vs c_var
+# I(c; z)     var          var                c_var vs c_var
+# I(c; Z)     var          vector             c_var vs c_vector
+
+
+
+
+def mutual_info(X, y, discrete_y=False, n_neighbors=3, transform=None, epsilon=1e-10):
+    X = atleast_2d(X)
+
+    # If X'=F(X) and Y'=G(Y) are homeomorphisms, then I(X,Y)=I(X',Y')
+    if transform: # rank, std, log
+        X = transform(X)
+        y = transform(y)
+
+    # Add small noise to continuous features as advised in Kraskov et. al.
+    X = X + epsilon * np.random.rand(*X.shape)
+    y = atleast_2d(y)
+
     if discrete_y:
         return mutual_info_cd(X, y, n_neighbors=n_neighbors)
     else:
+        y = y + epsilon * np.random.rand(*y.shape)
         return mutual_info_cc(X, y, n_neighbors=n_neighbors)
