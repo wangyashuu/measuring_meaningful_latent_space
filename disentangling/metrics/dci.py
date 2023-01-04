@@ -20,8 +20,6 @@ def dci(factors, codes):
         scores: Dictionary with average disentanglement score, completeness and
         informativeness (train and test).
     """
-    factors = factors.cpu().numpy()
-    codes = codes.cpu().numpy()
     batch_size = factors.shape[0]
     train_size = int(batch_size * 0.8)
     x_train, y_train = codes[:train_size, :].T, factors[:train_size, :].T

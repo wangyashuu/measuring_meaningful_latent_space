@@ -43,8 +43,6 @@ def get_score_matrix(codes, factors, discreted_factor=False):
 
 
 def sap(factors, codes):
-    factors = factors.cpu().numpy()
-    codes = codes.cpu().numpy()
     matrix = get_score_matrix(codes, factors)
     sorted = np.sort(matrix, axis=0)
     score = np.mean(sorted[-1, :] - sorted[-2, :])

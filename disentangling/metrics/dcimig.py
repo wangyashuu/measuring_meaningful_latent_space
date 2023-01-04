@@ -1,4 +1,5 @@
-import torch
+import numpy as np
+
 from .mig import calc_mutual_infos, calc_entropy
 
 """
@@ -7,7 +8,7 @@ Based on "How to Not Measure Disentanglement"
 """
 
 
-def dcimig(factors, codes, continuous_factors=True, nb_bins=10):
+def dcimig(factors, codes, continuous_factors=True, n_bins=10):
     """
     Computes the dcimig
 
@@ -21,19 +22,20 @@ def dcimig(factors, codes, continuous_factors=True, nb_bins=10):
     """
 
     n_factors, n_codes = factors.shape[1], codes.shape[1]
-    mutual_infos = calc_mutual_infos(codes, factors)  # n_codes, n_factors
+    # shape: n_codes, n_factors
+    mutual_infos = calc_mutual_infos(codes, factors)
 
-    mutual_infos_normalized = torch.zeros(n_codes, n_factors)
+    mutual_infos_normalized = np.zeros((n_codes, n_factors))
     for c in range(n_codes):
-        sorted = torch.sort(mutual_infos[c, :])[0]  # sort by each factor c
-        max_idx = torch.argmax(mutual_infos[c, :])
+        sorted = np.sort(mutual_infos[c, :]) # sort by each factor c
+        max_idx = np.argmax(mutual_infos[c, :])
         gap = sorted[-1] - sorted[-2]
         mutual_infos_normalized[c, max_idx] = gap
 
     gap_sum = 0
     for f in range(n_factors):
-        gap_sum += torch.max(mutual_infos_normalized[:, f])
+        gap_sum += np.max(mutual_infos_normalized[:, f])
 
-    factor_entropy = torch.sum(calc_entropy(factors))
+    factor_entropy = np.sum(calc_entropy(factors))
     dcimig_score = gap_sum / factor_entropy
     return dcimig_score

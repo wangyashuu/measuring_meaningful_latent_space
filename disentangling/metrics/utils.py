@@ -1,4 +1,3 @@
-import torch
 from sklearn.decomposition import PCA
 import numpy as np
 
@@ -27,8 +26,8 @@ def m0c1i0(factors):
     n_factors_half = factors.shape[1] // n_factors_per_latent
     original = factors[:, :n_factors_half]
     factors[:, n_factors_half:] = original
-    latents = torch.clone(original)
-    means = latents.float().mean(0)
+    latents = np.copy(original)
+    means = latents.mean(0)
     latents[latents < means] = -1
     return latents
 
@@ -50,8 +49,8 @@ def m1c0i0(factors):
     # c0: BUT a factor is captured by more than one code
     # by duplicated codes + modify code to loss info
     x = factors
-    latents = torch.hstack([x, x])
-    means = latents.float().mean(0)
+    latents = np.hstack([x, x])
+    means = latents.mean(0)
     latents[latents < means] = -1
     return latents
 
@@ -61,19 +60,19 @@ def m1c0i1(factors):
     # c0: BUT a factor is captured by more than one code
     # by duplicated codes
     x = factors
-    latents = torch.hstack([x, x])
+    latents = np.hstack([x, x])
     return latents
 
 
 def m1c1i0(factors):
-    latents = torch.clone(factors)
-    means = latents.float().mean(0)
+    latents = np.copy(factors)
+    means = latents.mean(0)
     latents[latents < means] = -1
     return latents
 
 
 def m1c1i1(factors):
-    latents = torch.clone(factors)
+    latents = np.copy(factors)
     return latents
 
 
@@ -81,30 +80,24 @@ def m0c1_PCA(factors):
     batch_size, n_factors = factors.shape
     n_factors_per_latent = 2
     n_latents = n_factors // n_factors_per_latent
-    latents = torch.zeros(
-        (batch_size, n_latents), dtype=factors.dtype, device=factors.device
-    )
+    latents = np.zeros((batch_size, n_latents))
     for i in range(n_latents):
-        target_factors = factors[:, i * 2 : (i + 1) * 2].cpu()
+        target_factors = factors[:, i * 2 : (i + 1) * 2]
         # print(a.shape, latents[:, i].shape)
-        latents[:, i] = torch.from_numpy(
-            PCA(n_components=1).fit_transform(target_factors)
-        ).reshape(-1)
+        latents[:, i] = (
+            PCA(n_components=1).fit_transform(target_factors).reshape(-1)
+        )
     return latents
 
 
-def generate_factors(batch_size, n_factor_dims, mu=0, sigma=10):
-    size = (batch_size, n_factor_dims)
-    factors = np.random.normal(mu, sigma, size).astype(int)
-    return torch.from_numpy(factors)
+def generate_factors(batch_size, n_factors=4, mu=0, sigma=10):
+    shape = (batch_size, n_factors)
+    factors = np.random.normal(mu, sigma, shape).astype(int)
+    return factors
 
 
-def run_metric(metric, representation_function, batch_size=12000, n_factors=8):
-    factors = generate_factors(batch_size, n_factor_dims=4)
+def run_metric(metric, representation_function, batch_size=12000, n_factors=4):
+    factors = generate_factors(batch_size, n_factors)
     latents = representation_function(factors)
     score = metric(factors, latents)
-    if torch.is_tensor(score):
-        return score.cpu()
-    elif type(score) is dict and torch.is_tensor(next(iter(score.values()))):
-        return {k: score[k].cpu() for k in score}
     return score
