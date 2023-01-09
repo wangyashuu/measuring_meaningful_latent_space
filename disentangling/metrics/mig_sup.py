@@ -1,9 +1,9 @@
-import torch
+import numpy as np
 
-from .mig import *
+from .mig import calc_entropy, calc_mutual_infos
 
 
-def mig_sup(factors, codes, epsilon=10e-8):
+def mig_sup(factors, codes, epsilon=1e-10):
     """
     Compute MIG-sup
 
@@ -15,11 +15,8 @@ def mig_sup(factors, codes, epsilon=10e-8):
     """
     # mutual_info matrix (n_codes, n_factors)
     mutual_infos = calc_mutual_infos(codes, factors)
-    # sort mi for each factor
-    # ::-1 reverse not support: https://github.com/pytorch/pytorch/issues/59786
-    # torch.searchsorted(): input value tensor is non-contiguous https://github.com/pytorch/pytorch/issues/52743
-    # https://discuss.pytorch.org/t/contigious-vs-non-contigious-tensor/30107
-    sorted = torch.sort(mutual_infos, dim=1, descending=True)[0]
+    # sort mi for each codes
+    sorted = np.sort(mutual_infos, axis=1)[:, ::-1]
     entropy = calc_entropy(codes)
-    score = torch.mean((sorted[:, 0] - sorted[:, 1]) / (entropy + epsilon))
+    score = np.mean((sorted[:, 0] - sorted[:, 1]) / (entropy + epsilon))
     return score

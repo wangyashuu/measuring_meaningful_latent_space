@@ -9,10 +9,10 @@ n_factors = 4
 
 def test_m0c0i0():
     def sample_factors(batch_size):
-        return generate_factors(batch_size, n_factors).cpu().numpy()
+        return generate_factors(batch_size, n_factors)
 
     def factor2code(factors):
-        return generate_factors(factors.shape[0], n_factors).cpu().numpy()
+        return generate_factors(factors.shape[0], n_factors)
 
     score = z_min_var(
         n_votes=10000,
@@ -21,36 +21,19 @@ def test_m0c0i0():
         factor2code=factor2code,
         n_global_items=30000,
     )
-    # TODO: analysis
     assert math.isclose(score, 1 / n_factors, abs_tol=0.2)  # 0 vs 1/n_factors
 
 
 def test_m0c0i1():
     # TODO
     pass
-    # def sample_factors(batch_size):
-    #     return generate_factors(batch_size, n_factor_dims=2).cpu().numpy()
-
-    # def factor2code(factors):
-    #     return (
-    #         generate_factors(factors.shape[0], n_factor_dims=2).cpu().numpy()
-    #     )
-
-    # score = z_min_var(
-    #     n_votes=10000,
-    #     batch_size=128,
-    #     sample_factors=sample_factors,
-    #     factor2code=factor2code,
-    #     n_global_items=30000,
-    # )
-    # assert math.isclose(score, 1, abs_tol=0.2)
 
 
 def test_m0c1i0():
     n_factors = 4
 
     def sample_factors(batch_size):
-        factors = generate_factors(batch_size, n_factors).cpu().numpy()
+        factors = generate_factors(batch_size, n_factors)
         return np.hstack([factors, factors])
 
     n_factors_per_latent = 2
@@ -75,7 +58,7 @@ def test_m0c1i0():
 
 def test_m0c1i1():
     def sample_factors(batch_size):
-        factors = generate_factors(batch_size, 2).cpu().numpy()
+        factors = generate_factors(batch_size, 2)
         return np.hstack([factors, factors])
 
     n_factors_per_latent = 2
@@ -98,7 +81,7 @@ def test_m0c1i1():
 
 def test_m1c0i0():
     def sample_factors(batch_size):
-        factors = generate_factors(batch_size, n_factors).cpu().numpy()
+        factors = generate_factors(batch_size, n_factors)
         return factors
 
     def factor2code(factors):
@@ -119,7 +102,7 @@ def test_m1c0i0():
 
 def test_m1c0i1():
     def sample_factors(batch_size):
-        factors = generate_factors(batch_size, n_factors).cpu().numpy()
+        factors = generate_factors(batch_size, n_factors)
         return factors
 
     def factor2code(factors):
@@ -138,7 +121,7 @@ def test_m1c0i1():
 
 def test_m1c1i0():
     def sample_factors(batch_size):
-        return generate_factors(batch_size, n_factors).cpu().numpy()
+        return generate_factors(batch_size, n_factors)
 
     def factor2code(factors):
         latents = np.copy(factors)
@@ -157,7 +140,7 @@ def test_m1c1i0():
 
 def test_m1c1i1():
     def sample_factors(batch_size):
-        return generate_factors(batch_size, n_factor_dims=2).cpu().numpy()
+        return generate_factors(batch_size, n_factors)
 
     def factor2code(factors):
         return np.copy(factors)

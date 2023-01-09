@@ -1,4 +1,4 @@
-import torch
+import numpy as np
 from .mig import calc_mutual_infos
 
 
@@ -14,12 +14,12 @@ def modularity(factors, codes):
     """Computes the modularity from mutual information."""
     # Mutual information has shape [num_codes, num_factors].
     mutual_infos = calc_mutual_infos(codes, factors)
-    squared_mi = torch.square(mutual_infos)
-    max_squared_mi = torch.max(squared_mi, axis=1)[0]
-    numerator = torch.sum(squared_mi, axis=1) - max_squared_mi
+    squared_mi = mutual_infos**2
+    max_squared_mi = np.max(squared_mi, axis=1)
+    numerator = np.sum(squared_mi, axis=1) - max_squared_mi
     denominator = max_squared_mi * (squared_mi.shape[1] - 1.0)
     delta = numerator / denominator
     modularity_score = 1.0 - delta
     index = max_squared_mi == 0.0
     modularity_score[index] = 0.0
-    return torch.mean(modularity_score)
+    return np.mean(modularity_score)
