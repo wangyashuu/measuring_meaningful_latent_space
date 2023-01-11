@@ -9,8 +9,8 @@ def test_compute_mi_cc():
     mean = np.zeros(2)
 
     # Setup covariance matrix with correlation coeff. equal 0.5.
-    sigma_1 = 1
-    sigma_2 = 10
+    sigma_1 = 10
+    sigma_2 = 50
     corr = 0.5
     cov = np.array(
         [
