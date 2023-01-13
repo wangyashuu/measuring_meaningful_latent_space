@@ -1,8 +1,10 @@
 import math
 import numpy as np
+from sklearn.decomposition import PCA
 
 from .z_min_var import z_min_var
 from .utils import generate_factors
+
 
 n_factors = 4
 
@@ -25,8 +27,26 @@ def test_m0c0i0():
 
 
 def test_m0c0i1():
+    n_factors = 2
+
+    def sample_factors(batch_size):
+        factors = generate_factors(batch_size, n_factors)
+        return factors
+
+    def factor2code(factors):
+        model = PCA()
+        latents = model.fit_transform(factors)
+        return latents
+
+    score = z_min_var(
+        n_votes=10000,
+        batch_size=128,
+        sample_factors=sample_factors,
+        factor2code=factor2code,
+        n_global_items=30000,
+    )
     # TODO
-    pass
+    assert math.isclose(score, 0.5, abs_tol=0.1)  # 0 vs 0.4997
 
 
 def test_m0c1i0():
@@ -37,6 +57,7 @@ def test_m0c1i0():
         return np.hstack([factors, factors])
 
     n_factors_per_latent = 2
+
     def factor2code(factors):
         n_factors_half = factors.shape[1] // n_factors_per_latent
         latents = (
@@ -53,7 +74,9 @@ def test_m0c1i0():
         n_global_items=30000,
     )
     # TODO
-    assert math.isclose(score, 1/n_factors_per_latent, abs_tol=0.2)  # 0 vs 0.4997
+    assert math.isclose(
+        score, 1 / n_factors_per_latent, abs_tol=0.2
+    )  # 0 vs 0.4997
 
 
 def test_m0c1i1():
@@ -62,6 +85,7 @@ def test_m0c1i1():
         return np.hstack([factors, factors])
 
     n_factors_per_latent = 2
+
     def factor2code(factors):
         n_factors_half = factors.shape[1] // n_factors_per_latent
         latents = (
@@ -76,7 +100,9 @@ def test_m0c1i1():
         factor2code=factor2code,
         n_global_items=30000,
     )
-    assert math.isclose(score, 1/n_factors_per_latent, abs_tol=0.2)  # 0 vs 0.5068
+    assert math.isclose(
+        score, 1 / n_factors_per_latent, abs_tol=0.2
+    )  # 0 vs 0.5068
 
 
 def test_m1c0i0():

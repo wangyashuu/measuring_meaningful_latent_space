@@ -24,9 +24,10 @@ def test_m0c0i0():
 
 
 def test_m0c0i1():
-    pass
-    # score = run_metric(dcimig, m0c0i1)
-    # assert math.isclose(score, 0, abs_tol=0.2)
+    scores = run_metric(dci, m0c0i1, n_factors=2)
+    assert math.isclose(scores["d"], 0, abs_tol=0.2)  # 0 vs 0.0826
+    assert math.isclose(scores["c"], 0, abs_tol=0.2)  # 0 vs 0.0969
+    assert math.isclose(scores["i"], 1, abs_tol=0.2)  # 1 vs 0.895
 
 
 def test_m0c1i0():

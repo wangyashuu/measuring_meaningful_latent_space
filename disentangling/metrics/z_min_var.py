@@ -57,7 +57,7 @@ def get_votes(
     sample_factors,
     factor2code,
 ):
-    f = sample_factors(1)
+    f = sample_factors(10)
     c = factor2code(f)
     n_factors = f.shape[1]
     n_codes = c.shape[1]
