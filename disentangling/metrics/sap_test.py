@@ -21,9 +21,9 @@ def test_m0c0i0():
 
 
 def test_m0c0i1():
-    pass
-    # score = run_metric(sap, m0c0i1)
-    # assert math.isclose(score, 0, abs_tol=0.2)
+    score = run_metric(sap, m0c0i1, n_factors=4)
+    assert not math.isclose(score, 1, abs_tol=0.3)
+    # 0.1250, 0.4088, 0.4782, 0.3082, 0.4754
 
 
 def test_m0c1i0():

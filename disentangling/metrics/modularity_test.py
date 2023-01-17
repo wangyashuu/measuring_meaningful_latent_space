@@ -22,9 +22,9 @@ def test_m0c0i0():
 
 
 def test_m0c0i1():
-    pass
-    # score = run_metric(mig, m0c0i1)
-    # assert math.isclose(score, 0, abs_tol=0.2)
+    score = run_metric(modularity, m0c0i1, n_factors=2)
+    # TODO: if bins mi, very unstable (0-.95), if ksg mi, (0-.25)
+    assert not math.isclose(score, 1, abs_tol=0.01)
 
 
 def test_m0c1i0():

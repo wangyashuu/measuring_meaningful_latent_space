@@ -4,8 +4,6 @@ from torch import Tensor, nn
 from torch.nn import functional as F
 
 
-
-
 class AE(nn.Module):
     def __init__(self, encoder: nn.Module, decoder: nn.Module) -> None:
         super().__init__()

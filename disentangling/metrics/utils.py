@@ -1,5 +1,6 @@
-from sklearn.decomposition import PCA
 import numpy as np
+from sklearn.decomposition import PCA
+
 
 """
 representation_functions
@@ -14,8 +15,15 @@ def m0c0i0(factors):
 
 
 def m0c0i1(factors):
-    # TODO
-    pass
+    batch_size, n_factors = factors.shape
+    n_latents = n_factors
+    train_size = batch_size // 2
+    train_factors = factors[:train_size]
+    test_factors = factors[train_size:]
+    model = PCA()
+    model.fit(train_factors)
+    latents = model.transform(test_factors)
+    return latents
 
 
 def m0c1i0(factors):
@@ -97,7 +105,14 @@ def generate_factors(batch_size, n_factors=4, mu=0, sigma=10):
 
 
 def run_metric(metric, representation_function, batch_size=12000, n_factors=4):
-    factors = generate_factors(batch_size, n_factors)
-    latents = representation_function(factors)
-    score = metric(factors, latents)
+    if representation_function == m0c0i1:
+        # generate double size of factors
+        # in representation_function: half for train, half for get codes.
+        factors = generate_factors(batch_size * 2, n_factors)
+        latents = representation_function(factors)
+        score = metric(factors[batch_size:], latents)
+    else:
+        factors = generate_factors(batch_size, n_factors)
+        latents = representation_function(factors)
+        score = metric(factors, latents)
     return score

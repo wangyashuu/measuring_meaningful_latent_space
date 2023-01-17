@@ -21,9 +21,9 @@ def test_m0c0i0():
 
 
 def test_m0c0i1():
-    pass
-    # score = run_metric(mig, m0c0i1)
-    # assert math.isclose(score, 0, abs_tol=0.2)
+    score = run_metric(mig, m0c0i1, n_factors=2)
+    # use bins mi, the score is unstable (0-.9)
+    assert not math.isclose(score, 1, abs_tol=0.3)
 
 
 def test_m0c1i0():
