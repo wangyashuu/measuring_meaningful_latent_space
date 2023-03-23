@@ -2,7 +2,7 @@ from urllib import request
 import os.path
 
 import numpy as np
-from torch.utils.data import Dataset, random_split
+from torch.utils.data import Dataset, random_split, Subset
 import torchvision.transforms as transforms
 
 
@@ -21,16 +21,19 @@ class DSprites(Dataset):
             request.urlretrieve(dataset_url, file_path)
         # Data was saved originally using python2, so we need to set the encoding.
         data = np.load(file_path, encoding="latin1", allow_pickle=True)
+        metadata = data["metadata"][()]
         self.data = data
         self.images = data["imgs"] * 255  # [:, None] increase the channel dim
-        self.latents = data["latents_values"]
-        self.latent_classes = data["latents_classes"]
-        self.metadata = data["metadata"]
+        self.metadata = metadata
+        selected_latents = metadata["latents_sizes"] > 1
+        self.latents = data["latents_values"][:, selected_latents]
+        self.latent_classes = data["latents_classes"][:, selected_latents]
         self.transform = transform or transforms.ToTensor()
 
     @property
     def latents_sizes(self):
-        return self.metatdata["latents_sizes"]
+        selected_latents = self.metadata["latents_sizes"] > 1
+        return self.metadata["latents_sizes"][selected_latents]
 
     def __len__(self):
         return len(self.images)
@@ -42,24 +45,40 @@ class DSprites(Dataset):
             image = self.transform(image)
         return image, latent
 
+    def latent2index(self, latents):
+        latents_sizes = self.latents_sizes
+        latents_bases = latents_sizes[::-1].cumprod()[::-1][1:]
+        latents_bases = np.concatenate((latents_bases, np.array([1])))
+        return np.dot(latents, latents_bases).astype(int)
+
+    # def sample_latent(latent_ranges, size=1):
+    #     samples = np.zeros((size, latent_ranges.shape[0]))
+    #     for lat_i, lat_range in enumerate(latent_ranges):
+    #         low, high = lat_range
+    #         samples[:, lat_i] = np.random.randint(
+    #             low=low, high=high, size=size
+    #         )
+    #     return samples
+
+    # def get_latent_ranges(self):
+    #     return self.latents
+
 
 def select_index_by_range(latents_sizes, includes, excludes):
-    index_matrix = np.arange(latents_sizes).reshape(latents_sizes)
+    index_matrix = np.arange(np.prod(latents_sizes)).reshape(latents_sizes)
     all_indices = ()
     for i, s in enumerate(latents_sizes):
-        if str(i) in includes:
-            include_range = (np.array(includes[str(i)]) * s).astype(int)
+        if includes is not None and i in includes:
+            include_range = (np.array(includes[i]) * s).astype(int)
             include_indices = slice(*include_range)
-        elif str(i) in excludes:
-            exclude_range = (np.array(excludes[str(i)]) * s).astype(int)
+        elif excludes is not None and i in excludes:
+            exclude_range = (np.array(excludes[i]) * s).astype(int)
             include_indices = list(range(0, exclude_range[0])) + list(
                 range(exclude_range[1], s)
             )
         else:
-            include_indices = slice(
-                None,
-            )
-        indices = indices + (include_indices,)
+            include_indices = slice(None, None, None)
+        all_indices = all_indices + (include_indices,)
     selected = index_matrix[all_indices].flatten()
     return selected
 
@@ -71,8 +90,8 @@ def dSprites(train_rate=0.8, includes=None, excludes=None):
         indices = select_index_by_range(
             dSprites.latents_sizes, includes, excludes
         )
-        train_set = dSprites[indices]
-        val_set = dSprites[np.delete(np.arange(size), indices)]
+        train_set = Subset(dSprites, indices)
+        val_set = Subset(dSprites, np.delete(np.arange(size), indices))
     else:
         train_size = int(size * train_rate)
         val_size = size - train_size
