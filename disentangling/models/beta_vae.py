@@ -16,6 +16,8 @@ class BetaVAE(VAE):
         decoder_input_shape: Tuple,
         latent_dim: int,
         beta: int,
+        c_max = None,
+        n_c_iter = None,
     ) -> None:
         super().__init__(
             encoder,
@@ -25,9 +27,11 @@ class BetaVAE(VAE):
             latent_dim,
         )
         self.beta = beta
+        self.c_max = c_max
+        self.n_c_iter = n_c_iter
 
     def loss_function(
-        self, input: Tensor, output: Union[Tensor, List[Tensor]], *args
+        self, input: Tensor, output: Union[Tensor, List[Tensor]], *args, **kwargs
     ) -> dict:
         decoded, mu, logvar, *_ = output
         batch_size = decoded.shape[0]
@@ -37,9 +41,19 @@ class BetaVAE(VAE):
         kld_loss = (
             -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
         ) / batch_size
-        loss = reconstruction_loss + self.beta * kld_loss
+
+        c = torch.tensor(0).to(reconstruction_loss)
+        if self.c_max is not None:
+            n_iter = kwargs.pop('n_iter')
+            c = (n_iter / self.n_c_iter) * self.c_max
+            # c = torch.clamp(c, 0, self.c_max)
+            loss = reconstruction_loss + self.beta * (kld_loss - c).abs()
+        else:
+            loss = reconstruction_loss + self.beta * kld_loss
+
         return dict(
             loss=loss,
             reconstruction_loss=reconstruction_loss,
             kld_loss=kld_loss,
+            c=c
         )
