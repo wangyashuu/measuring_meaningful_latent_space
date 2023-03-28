@@ -3,7 +3,7 @@ import torch
 from scipy.special import digamma, gamma
 from sklearn.neighbors import NearestNeighbors, KDTree
 from sklearn.metrics import mutual_info_score
-
+from sklearn.preprocessing import scale
 
 """
 adapted from https://github.com/scikit-learn/scikit-learn/blob/82df48934eba1df9a1ed3be98aaace8eada59e6e/sklearn/feature_selection/_mutual_info.py#
@@ -120,8 +120,18 @@ def mutual_info_cd(X, y, n_neighbors=3):
     return max(0, mi)
 
 
+def default_transform(X):
+    return scale(X, with_mean=False)
+
+
 def get_mutual_info_by_ksg(
-    X, y, discrete_x=False, discrete_y=False, n_neighbors=3, transform=None
+    X,
+    y,
+    discrete_x=False,
+    discrete_y=False,
+    n_neighbors=3,
+    distance_metric="chebyshev",
+    transform=default_transform,
 ):
     X = atleast_2d(X)
     y = atleast_2d(y)
@@ -137,7 +147,9 @@ def get_mutual_info_by_ksg(
         return mutual_info_cd(X, y, n_neighbors=n_neighbors)
     else:
         y = add_random_noise(y)
-        return mutual_info_cc(X, y, n_neighbors=n_neighbors)
+        return mutual_info_cc(
+            X, y, n_neighbors=n_neighbors, distance_metric=distance_metric
+        )
 
 
 ### get entropy
@@ -167,7 +179,7 @@ def get_entropy_by_ksg(
         digamma(n_samples)
         - digamma(n_neighbors)
         + np.log(vub)
-        + n_dims * np.mean(np.log(distances))
+        + n_dims * np.mean(np.log(2 * distances[distances > 0]))
     )
 
 
@@ -294,6 +306,16 @@ def get_captured_mi_from_factor(
             *args,
             **kwargs
         )
+    elif estimator == "max":
+        mi_max = np.array(
+            [
+                get_mutual_info_by_ksg(
+                    codes[:, i], factor, discrete_y=discrete_factor
+                )
+                for i in range(codes.shape[1])
+            ]
+        ).max()
+        return mi_max
 
 
 def get_captured_mis(codes, factors, *args, **kwargs):
