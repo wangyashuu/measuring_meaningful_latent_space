@@ -3,7 +3,7 @@ import numpy as np
 from .mi import get_mutual_infos, get_entropies
 
 
-def mig_sup(factors, codes, epsilon=1e-10):
+def mig_sup(factors, codes, estimator="ksg", epsilon=1e-10):
     """
     Compute MIG-sup
 
@@ -14,7 +14,7 @@ def mig_sup(factors, codes, epsilon=1e-10):
         score
     """
     # mutual_info matrix (n_codes, n_factors)
-    mutual_infos = get_mutual_infos(codes, factors)
+    mutual_infos = get_mutual_infos(codes, factors, estimator=estimator)
     # sort mi for each codes
     sorted = np.sort(mutual_infos, axis=1)[:, ::-1]
     entropies = get_entropies(codes)

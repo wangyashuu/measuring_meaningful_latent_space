@@ -17,43 +17,43 @@ from .mig_sup import mig_sup
 
 def test_m0c0i0():
     score = run_metric(mig_sup, m0c0i0)
-    assert math.isclose(score, 0, abs_tol=0.2)  # 0.0005
+    assert math.isclose(score, 0, abs_tol=0.2)  # 0.0000
 
 
 def test_m0c0i1():
-    score = run_metric(mig_sup, m0c0i1, n_factors=2)
+    score = run_metric(mig_sup, m0c0i1)
     # use bins mi, the score is unstable (0-.9)
-    assert not math.isclose(score, 1, abs_tol=0.3)
+    assert math.isclose(score, 0, abs_tol=0.2) # 0.0056
 
 
 def test_m0c1i0():
     score = run_metric(mig_sup, m0c1i0)
-    assert math.isclose(score, 0, abs_tol=0.2)  # 0
+    assert math.isclose(score, 0, abs_tol=0.2)  # 0.0004
 
 
 def test_m0c1i1():
     score = run_metric(mig_sup, m0c1i1)
-    assert math.isclose(score, 0, abs_tol=0.2)  # 0
+    assert math.isclose(score, 0, abs_tol=0.2)  # 0.0000
 
 
 def test_m1c0i0():
     score = run_metric(mig_sup, m1c0i0)
     # Mark: it does not measure informativeness
     # since it normalized by entropy of latents.
-    assert math.isclose(score, 1, abs_tol=0.2)  # 0.9666
+    assert math.isclose(score, 1, abs_tol=0.2)  # 0.9903
 
 
 def test_m1c0i1():
     score = run_metric(mig_sup, m1c0i1)
-    assert math.isclose(score, 1, abs_tol=0.2)  # 0.8441
+    assert math.isclose(score, 1, abs_tol=0.2)  # 0.9974
 
 
 def test_m1c1i0():
     score = run_metric(mig_sup, m1c1i0)
     # mark, it does not measure informativeness
-    assert math.isclose(score, 1, abs_tol=0.2)  # 0.9661
+    assert math.isclose(score, 1, abs_tol=0.2)  # 0.9900
 
 
 def test_m1c1i1():
     score = run_metric(mig_sup, m1c1i1)
-    assert math.isclose(score, 1, abs_tol=0.2)  # 0.8408
+    assert math.isclose(score, 1, abs_tol=0.2)  # 0.9935

@@ -8,7 +8,7 @@ Based on "How to Not Measure Disentanglement"
 """
 
 
-def dcimig(factors, codes, continuous_factors=True, n_bins=10):
+def dcimig(factors, codes, estimator='ksg', continuous_factors=True, n_bins=10):
     """
     Computes the dcimig
 
@@ -23,7 +23,7 @@ def dcimig(factors, codes, continuous_factors=True, n_bins=10):
 
     n_factors, n_codes = factors.shape[1], codes.shape[1]
     # shape: n_codes, n_factors
-    mutual_infos = get_mutual_infos(codes, factors)
+    mutual_infos = get_mutual_infos(codes, factors, estimator=estimator)
 
     mutual_infos_normalized = np.zeros((n_codes, n_factors))
     for c in range(n_codes):

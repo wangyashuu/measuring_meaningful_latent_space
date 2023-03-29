@@ -1,6 +1,7 @@
 import scipy
 import numpy as np
 from sklearn import ensemble
+from sklearn.model_selection import train_test_split
 
 """
 Implementation of Disentanglement, Completeness and Informativeness.
@@ -11,7 +12,7 @@ Adapted from: https://github.com/google-research/disentanglement_lib
 """
 
 
-def dci(factors, codes):
+def dci(factors, codes, test_size=0.3, random_state=None):
     """
     Args:
         factors: the real generative factors (batch_size, factor_dims).
@@ -20,11 +21,10 @@ def dci(factors, codes):
         scores: Dictionary with average disentanglement score, completeness and
         informativeness (train and test).
     """
-    batch_size = factors.shape[0]
-    train_size = int(batch_size * 0.8)
-    x_train, y_train = codes[:train_size, :].T, factors[:train_size, :].T
-    x_test, y_test = codes[train_size:, :].T, factors[train_size:, :].T
-    return _compute_dci(x_train, y_train, x_test, y_test)
+    x_train, x_test, y_train, y_test = train_test_split(
+        codes, factors, test_size=test_size, random_state=random_state
+    )
+    return _compute_dci(x_train.T, y_train.T, x_test.T, y_test.T)
 
 
 def _compute_dci(mus_train, ys_train, mus_test, ys_test):
