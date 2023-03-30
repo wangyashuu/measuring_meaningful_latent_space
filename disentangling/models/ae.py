@@ -1,5 +1,3 @@
-from typing import List, Union
-
 from torch import Tensor, nn
 from torch.nn import functional as F
 
@@ -25,13 +23,13 @@ class AE(nn.Module):
         decoded = self.decoder(encoded)
         return decoded
 
-    def loss_function(
-        self, input: Tensor, output: Union[Tensor, List[Tensor]], *args
-    ) -> dict:
-        decoded = output
-        batch_size = decoded.shape[0]
-        reconstruction_loss = (
-            F.mse_loss(input, decoded, reduction="sum") / batch_size
-        )
-        loss = reconstruction_loss
-        return dict(loss=loss)
+
+def compute_ae_loss(input, ae, *args, **kwargs) -> dict:
+    output = ae(input)
+    decoded = output
+    batch_size = decoded.shape[0]
+    reconstruction_loss = (
+        F.mse_loss(input, decoded, reduction="sum") / batch_size
+    )
+    loss = reconstruction_loss
+    return dict(loss=loss)

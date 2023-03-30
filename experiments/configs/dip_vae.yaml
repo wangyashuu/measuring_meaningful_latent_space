@@ -1,40 +1,8 @@
-model:
-  name: "DIPVAE"
-  input_shape: [3, 64, 64]
-  latent_dim: 128
-  hidden_channels: [16, 64, 256]
-  # dip_type: "i"
-  # lambda_d_factor: 10
-  # lambda_od: 10
-  dip_type: "ii"
-  lambda_d_factor: 1
-  lambda_od: 10
-
-data:
-  name: "CelebA"
-
-train:
-  batch_size: 64
-
-val:
-  batch_size: 64
-
-optimizers:
-  - lr: 0.0001
-    weight_decay: 0.0
-
-schedulers:
-  - gamma: 0.95
-
-trainer:
-  accelerator: "gpu"
-  devices: [1, 3, 4, 5, 6]
-  max_epochs: 4
-
-logging:
-  save_dir: "logs/"
-
-metrics:
-  includes: ["mig"]
-
-seed: 1265
+model_name: "dip_vae"
+loss_kwargs:
+  dip_type: "i"
+  lambda_od: 2
+  lambda_d: 20
+  # dip_type: "ii"
+  # lambda_od: 2
+  # lambda_d: 2
