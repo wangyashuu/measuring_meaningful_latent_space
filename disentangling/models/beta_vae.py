@@ -1,4 +1,4 @@
-from typing import List, Tuple, Union
+from typing import Tuple
 
 import torch
 from torch import Tensor, nn
@@ -15,9 +15,6 @@ class BetaVAE(VAE):
         encoder_output_shape: Tuple,
         decoder_input_shape: Tuple,
         latent_dim: int,
-        beta: int,
-        c_max = None,
-        n_c_iter = None,
     ) -> None:
         super().__init__(
             encoder,
@@ -26,34 +23,41 @@ class BetaVAE(VAE):
             decoder_input_shape,
             latent_dim,
         )
-        self.beta = beta
-        self.c_max = c_max
-        self.n_c_iter = n_c_iter
 
-    def loss_function(
-        self, input: Tensor, output: Union[Tensor, List[Tensor]], *args, **kwargs
-    ) -> dict:
-        decoded, mu, logvar, *_ = output
-        batch_size = decoded.shape[0]
-        reconstruction_loss = (
-            F.mse_loss(input, decoded, reduction="sum") / batch_size
-        )
-        kld_loss = (
-            -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-        ) / batch_size
 
-        c = torch.tensor(0).to(reconstruction_loss)
-        if self.c_max is not None:
-            n_iter = kwargs.pop('n_iter')
-            c = (n_iter / self.n_c_iter) * self.c_max
-            # c = torch.clamp(c, 0, self.c_max)
-            loss = reconstruction_loss + self.beta * (kld_loss - c).abs()
-        else:
-            loss = reconstruction_loss + self.beta * kld_loss
+def compute_beta_vae_loss(
+    input: Tensor,
+    beta_vae,
+    beta=1,
+    c_max=None,
+    n_c_steps=None,
+    step=None,
+    *args,
+    **kwargs
+) -> dict:
+    output = beta_vae(input)
+    decoded, mu, logvar, *_ = output
+    batch_size = decoded.shape[0]
+    reconstruction_loss = (
+        F.mse_loss(input, decoded, reduction="sum") / batch_size
+    )
+    kld_loss = (
+        -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+    ) / batch_size
 
+    if c_max is not None:
+        c = torch.clamp((step / n_c_steps) * c_max, 0, c_max)
+        loss = reconstruction_loss + beta * (kld_loss - c).abs()
         return dict(
             loss=loss,
             reconstruction_loss=reconstruction_loss,
             kld_loss=kld_loss,
-            c=c
+            c=c,
         )
+
+    loss = reconstruction_loss + beta * kld_loss
+    return dict(
+        loss=loss,
+        reconstruction_loss=reconstruction_loss,
+        kld_loss=kld_loss,
+    )
