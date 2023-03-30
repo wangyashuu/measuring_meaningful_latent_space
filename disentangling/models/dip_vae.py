@@ -53,7 +53,7 @@ def compute_dip_vae_loss(
         cov_z = expectation_cov + cov_mu
         target_cov = cov_z
     else:
-        raise NotImplementedError("DIP variant not supported.")
+        raise NotImplementedError(f"dip_type = {dip_type}")
     diag = torch.diagonal(target_cov, offset=0, dim1=-2, dim2=-1)
     off_diag = diag - torch.diag_embed(diag, offset=0, dim1=-2, dim2=-1)
     dip_loss = lambda_od * torch.sum(off_diag**2) + lambda_d * torch.sum(

@@ -62,7 +62,6 @@ def compute_factor_vae_loss(
     # log(D(z) / 1 - D(z)) = logit_qz - logit_q̄z
     ###
     tc_loss = torch.mean(z_logits[:, 0] - z_logits[:, 1])
-    # loss = reconstruction_loss + kld_loss + tc_loss_factor * tc_loss
     loss = reconstruction_loss + kld_loss + tc_loss_factor * tc_loss
     return dict(
         loss=loss,

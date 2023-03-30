@@ -59,7 +59,7 @@ class VAE(AE):
         decoded = self.decoder(decoded)
         return decoded
 
-    def forward(self, input: Tensor, optimizer_idx: int = 0) -> List[Tensor]:
+    def forward(self, input: Tensor) -> List[Tensor]:
         encoded = self.encoder(input)
         encoded = self.post_encoder(encoded)
         latent_dim = encoded.shape[1] // 2
