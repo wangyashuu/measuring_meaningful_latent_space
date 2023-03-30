@@ -1,39 +1,45 @@
-model:
-  name: "FactorVAE"
-  input_shape: [3, 64, 64]
-  latent_dim: 64
-  hidden_channels: [16, 64, 256]
-  tc_loss_factor: 10
+model_name: "factor_vae"
+loss_kwargs:
+  tc_loss_factor: 35
 
-data:
-  name: "CelebA"
+auxiliary:
+  model:
+    name: "factor_vae_discriminator"
+  optimizer:
+    name: "Adam"
+    lr: 0.00001
+    betas: [0.5, 0.9]
 
-train:
-  batch_size: 64
-
-val:
-  batch_size: 64
-
-optimizers:
-  - lr: 0.0001
-    weight_decay: 0.0
-  - lr: 0.0003
-    model: "discriminator"
-    weight_decay: 0.0
-
-schedulers:
-  - gamma: 0.95
-  - gamma: 0.95
-
-trainer:
-  accelerator: "gpu"
-  devices: [1, 3, 4, 5, 6]
-  max_epochs: 8
-
-logging:
-  save_dir: "logs/"
-
-metrics:
-  includes: ["mig"]
+latent_dim: 16
+n_epochs: 100
+metrics: []
 
 seed: 12
+output_dir: output
+
+net_params:
+  - net_type: "cnn"
+    hiddens: [64, 64, 64, 64]
+  - net_type: "fc"
+    hiddens: [128, 128] # , 32, 16
+
+data:
+  input_shape: [1, 64, 64]
+  name: "dSprites"
+
+dataloader:
+  train:
+    batch_size: 64
+    num_workers: 16
+    shuffle: true
+  val:
+    batch_size: 256
+    num_workers: 16
+
+optimizer:
+  name: "Adam"
+  lr: 0.0001
+
+fabric:
+  accelerator: "gpu"
+  devices: [3, 4, 5, 6, 7]
