@@ -1,4 +1,4 @@
-from typing import List, Tuple, Union
+from typing import Tuple
 
 import torch
 from torch import Tensor, nn
@@ -25,8 +25,6 @@ def log_density_gaussian(x: Tensor, mu: Tensor, logvar: Tensor):
 
 # def log_prob(value, mu, std):
 #     # compute the variance
-#     import torch
-
 #     var = std**2
 #     log_scale = torch.log(std)
 #     return (
@@ -59,12 +57,6 @@ class BetaTCVAE(VAE):
         encoder_output_shape: Tuple,
         decoder_input_shape: Tuple,
         latent_dim: int,
-        mutual_info_loss_factor: float,
-        tc_loss_factor: float,
-        dimension_wise_kl_factor: float,
-        train_set_size: int,
-        val_set_size: int,
-        minibatch_stratified_sampling: bool = False,
     ) -> None:
         super().__init__(
             encoder,
@@ -73,86 +65,80 @@ class BetaTCVAE(VAE):
             decoder_input_shape,
             latent_dim,
         )
-        #  reconstruction_loss
-        #     + self.alpha * mutual_info_loss
-        #     + self.beta * tc_loss
-        #     + self.gamma * dimension_wise_kl
-        self.mutual_info_loss_factor = mutual_info_loss_factor
-        self.tc_loss_factor = tc_loss_factor
-        self.dimension_wise_kl_factor = dimension_wise_kl_factor
-        self.train_set_size = train_set_size
-        self.val_set_size = val_set_size
-        self.minibatch_stratified_sampling = minibatch_stratified_sampling
 
-    def loss_function(
-        self, input: Tensor, output: Union[Tensor, List[Tensor]], *args
-    ) -> dict:
-        decoded, mu, logvar, z = output
 
-        batch_size = decoded.shape[0]
-        std = torch.exp(0.5 * logvar)
-        dataset_size = (
-            self.train_set_size if self.training else self.val_set_size
+def compute_beta_tcvae_loss(
+    input,
+    beta_tcvae,
+    minibatch_stratified_sampling,
+    mutual_info_loss_factor,
+    tc_loss_factor,
+    dimension_wise_kl_loss_factor,
+    dataset_size,
+    *args,
+    **kwargs,
+) -> dict:
+    output = beta_tcvae(input)
+    decoded, mu, logvar, z = output
+
+    batch_size = decoded.shape[0]
+    std = torch.exp(0.5 * logvar)
+
+    reconstruction_loss = (
+        F.mse_loss(input, decoded, reduction="sum") / batch_size
+    )
+
+    log_p_z = Normal(0, 1).log_prob(z).sum(-1)
+    log_q_z_given_x = Normal(mu, std).log_prob(z).sum(-1)
+
+    # \log{q(z)} ~= -\log{NM} + 1/M \sum^M_i \log{ \sum^M_j q( z_x^{(i)} | x^{(j)} ) }
+    # \log{ q( z_x^{(i)} | x^{(j)} ) } where z_x^{(i)} is a sample from q(z|x^{(i)})
+    # [batch_size, batch_size, latent_dim], [i, j] => probs of z_xi given xj
+    log_q_z_xi_given_xj = Normal(
+        mu.reshape(1, batch_size, -1),  # => [1, batch_size, latent_dim]
+        std.reshape(1, batch_size, -1),
+    ).log_prob(
+        z.reshape(batch_size, 1, -1)  # => [batch_size, 1, latent_dim]
+    )
+
+    if minibatch_stratified_sampling:
+        logiw_matrix = log_importance_weight_matrix(
+            batch_size, dataset_size
+        ).to(input.device)
+
+        log_q_z = torch.logsumexp(
+            logiw_matrix + log_q_z_xi_given_xj.sum(-1), dim=-1
         )
-        device = input.device
+        log_prod_q_z = torch.logsumexp(
+            logiw_matrix.reshape(batch_size, batch_size, -1)
+            + log_q_z_xi_given_xj,
+            dim=1,
+        ).sum(-1)
 
-        # -log_p_x = -Normal(x_mu, x_std).log_prob(input)
-        reconstruction_loss = (
-            F.mse_loss(input, decoded, reduction="sum") / batch_size
+    else:
+        log_mn = torch.log(
+            torch.tensor([batch_size * dataset_size], device=input.device)
         )
-
-        log_p_z = Normal(0, 1).log_prob(z).sum(-1)
-        log_q_z_given_x = Normal(mu, std).log_prob(z).sum(-1)
-
-        # \log{q(z)} ~= -\log{NM} + 1/M \sum^M_i \log{ \sum^M_j q( z_x^{(i)} | x^{(j)} ) }
-        # \log{ q( z_x^{(i)} | x^{(j)} ) } where z_x^{(i)} is a sample from q(z|x^{(i)})
-        # [batch_size, batch_size, latent_dim], [i, j] => probs of z_xi given xj
-        log_q_z_xi_given_xj = Normal(
-            mu.reshape(1, batch_size, -1),  # => [1, batch_size, latent_dim]
-            std.reshape(1, batch_size, -1),
-        ).log_prob(
-            z.reshape(batch_size, 1, -1)  # => [batch_size, 1, latent_dim]
+        log_q_z = -log_mn + torch.logsumexp(
+            log_q_z_xi_given_xj.sum(-1), dim=-1
         )
+        log_prod_q_z = (
+            -log_mn + torch.logsumexp(log_q_z_xi_given_xj, dim=1)
+        ).sum(-1)
 
-        if self.minibatch_stratified_sampling:
-            logiw_matrix = log_importance_weight_matrix(
-                batch_size, dataset_size
-            ).to(device)
-
-            log_q_z = torch.logsumexp(
-                logiw_matrix + log_q_z_xi_given_xj.sum(-1), dim=-1
-            )
-            log_prod_q_z = torch.logsumexp(
-                logiw_matrix.reshape(batch_size, batch_size, -1)
-                + log_q_z_xi_given_xj,
-                dim=1,
-            ).sum(-1)
-
-        else:
-            log_mn = torch.log(
-                torch.tensor([batch_size * dataset_size]).to(device)
-            )
-            log_q_z = -log_mn + torch.logsumexp(
-                log_q_z_xi_given_xj.sum(-1), dim=-1
-            )
-            log_prod_q_z = (
-                -log_mn + torch.logsumexp(log_q_z_xi_given_xj, dim=1)
-            ).sum(-1)
-
-        mutual_info_loss = (log_q_z_given_x - log_q_z).mean()
-        tc_loss = (log_q_z - log_prod_q_z).mean()
-        dimension_wise_kl = (log_prod_q_z - log_p_z).mean()
-
-        loss = (
-            reconstruction_loss
-            + self.mutual_info_loss_factor * mutual_info_loss
-            + self.tc_loss_factor * tc_loss
-            + self.dimension_wise_kl_factor * dimension_wise_kl
-        )
-        return dict(
-            loss=loss,
-            reconstruction_loss=reconstruction_loss,
-            mutual_info_loss=mutual_info_loss,
-            tc_loss=tc_loss,
-            dimension_wise_kl=dimension_wise_kl,
-        )
+    mutual_info_loss = (log_q_z_given_x - log_q_z).mean()
+    tc_loss = (log_q_z - log_prod_q_z).mean()
+    dimension_wise_kl_loss = (log_prod_q_z - log_p_z).mean()
+    loss = (
+        reconstruction_loss
+        + mutual_info_loss_factor * mutual_info_loss
+        + tc_loss_factor * mutual_info_loss
+        + dimension_wise_kl_loss_factor * dimension_wise_kl_loss
+    )
+    return dict(
+        loss=loss,
+        reconstruction_loss=reconstruction_loss,
+        mutual_info_loss=mutual_info_loss,
+        tc_loss=tc_loss,
+        dimension_wise_kl_loss=dimension_wise_kl_loss,
+    )

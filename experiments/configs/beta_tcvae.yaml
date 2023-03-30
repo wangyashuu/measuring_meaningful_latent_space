@@ -1,42 +1,43 @@
-model:
-  name: "BetaTCVAE"
-  input_shape: [3, 64, 64]
-  latent_dim: 64
-  hidden_channels: [16, 64, 256, 512]
+model_name: "beta_tcvae"
+loss_kwargs:
   mutual_info_loss_factor: 1.0
-  tc_loss_factor: 2.0
-  dimension_wise_kl_factor: 1.0
+  tc_loss_factor: 4.0
+  dimension_wise_kl_loss_factor: 1.0
   minibatch_stratified_sampling: true
-  train_set_size: 162770
-  val_set_size: 19962
-  # train_set_size: 589824
-  # val_set_size: 147456
+
+seed: 12
+output_dir: output
+latent_dim: 16
+n_epochs: 1
+metrics: []
+
+net_params:
+  - net_type: "cnn"
+    hiddens: [64, 64, 64, 64]
+  - net_type: "fc"
+    hiddens: [128, 128]
 
 data:
-  name: "CelebA"
+  input_shape: [1, 64, 64]
+  name: "dSprites"
 
-train:
-  batch_size: 128
+dataloader:
+  train:
+    batch_size: 64
+    num_workers: 16
+    shuffle: true
+  val:
+    batch_size: 256
+    num_workers: 16
 
-val:
-  batch_size: 128
+optimizer:
+  name: "Adam"
+  lr: 0.0001
 
-optimizers:
-  - lr: 0.0001
-    weight_decay: 0.0
+scheduler:
+  name: "ExponentialLR"
+  gamma: 0.95
 
-schedulers:
-  - gamma: 0.95
-
-trainer:
+fabric:
   accelerator: "gpu"
-  devices: [1, 3, 4, 5, 6]
-  max_epochs: 12
-
-logging:
-  save_dir: "logs/"
-
-metrics:
-  includes: ["mig"]
-
-seed: 1265
+  devices: [1]
