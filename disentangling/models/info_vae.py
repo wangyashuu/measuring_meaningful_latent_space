@@ -1,8 +1,7 @@
-from distutils.util import rfc822_escape
-from typing import List, Tuple, Union
+from typing import Tuple
 
 import torch
-from torch import nn, Tensor
+from torch import nn
 from torch.nn import functional as F
 
 from .vae import VAE
@@ -26,7 +25,7 @@ def imq_kernel(z1, z2, sigma, scales=[1.0]):
     return k
 
 
-def rbf_kernel(z1, z2, n_latent_dim, sigma):
+def rbf_kernel(z1, z2, sigma):
     """
     TODO: Radial basis function kernel
     https://en.wikipedia.org/wiki/Radial_basis_function_kernel
@@ -40,8 +39,6 @@ def rbf_kernel(z1, z2, n_latent_dim, sigma):
 
 
 class InfoVAE(VAE):
-    "TODO: https://github.com/fducau/infoVAE/issues/2"
-
     def __init__(
         self,
         encoder: nn.Module,
@@ -49,10 +46,6 @@ class InfoVAE(VAE):
         encoder_output_shape: Tuple,
         decoder_input_shape: Tuple,
         latent_dim: int,
-        alpha: float,
-        gamma: float,
-        kernel_type: str = "imq",
-        kernel_sigma: float = 1.0,
     ) -> None:
         super().__init__(
             encoder,
@@ -61,50 +54,54 @@ class InfoVAE(VAE):
             decoder_input_shape,
             latent_dim,
         )
-        self.kernel_type = kernel_type
-        self.kernel_sigma = kernel_sigma
-        # TODO: refactor
-        # self.kld_loss_factor = 1 - alpha
-        # self.mmd_loss_factor = gamma - (1-alpha)
-        self.alpha = alpha
-        self.gamma = gamma
 
-    def loss_function(
-        self, input: Tensor, output: Union[Tensor, List[Tensor]], *args
-    ) -> dict:
-        decoded, mu, logvar, z = output
-        batch_size = decoded.shape[0]
 
-        reconstruction_loss = (
-            F.mse_loss(input, decoded, reduction="sum") / batch_size
-        )
-        kld_loss = (
-            -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-        ) / batch_size
+def compute_info_vae_loss(
+    input,
+    info_vae,
+    alpha,
+    lambd,
+    kernel_type="rbf",
+    kernel_sigma=1,
+    *args,
+    **kwargs
+) -> dict:
+    # TODO: refactor
+    # kld_loss_factor = 1 - alpha
+    # mmd_loss_factor = gamma - (1-alpha)
 
-        z_posterior = z
-        z_prior = torch.randn_like(z, device=z.device)
+    output = info_vae(input)
+    decoded, mu, logvar, z = output
+    batch_size = decoded.shape[0]
 
-        compute_kernel = (
-            rbf_kernel if self.kernel_type == "rbf" else imq_kernel
-        )
-        z_posterior_kernel = compute_kernel(
-            z_posterior, z_posterior, self.kernel_sigma
-        )
-        z_prior_kernel = compute_kernel(z_prior, z_prior, self.kernel_sigma)
-        cross_kernel = compute_kernel(z_prior, z_posterior, self.kernel_sigma)
+    reconstruction_loss = (
+        F.mse_loss(input, decoded, reduction="sum") / batch_size
+    )
+    kld_loss = (
+        -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+    ) / batch_size
 
-        mmd_z_posterior = (  # z_posterior_kernel.mean()
-            z_posterior_kernel - z_posterior_kernel.diag().diag()
-        ).sum() / ((batch_size - 1) * batch_size)
-        mmd_z_prior = (  # z_prior_kernel.mean()
-            z_prior_kernel - z_prior_kernel.diag().diag()
-        ).sum() / ((batch_size - 1) * batch_size)
-        mmd_cross = cross_kernel.mean()
-        mmd_loss = mmd_z_posterior + mmd_z_prior + -2 * mmd_cross
-        loss = (
-            reconstruction_loss
-            + (1 - self.alpha) * kld_loss
-            + (self.alpha + self.gamma - 1) * mmd_loss
-        )
-        return dict(loss=loss, kld_loss=kld_loss, mmd_loss=mmd_loss)
+    z_posterior = z
+    z_prior = torch.randn_like(z, device=z.device)
+
+    compute_kernel = rbf_kernel if kernel_type == "rbf" else imq_kernel
+    z_posterior_kernel = compute_kernel(
+        z_posterior, z_posterior, sigma=kernel_sigma
+    )
+    z_prior_kernel = compute_kernel(z_prior, z_prior, sigma=kernel_sigma)
+    cross_kernel = compute_kernel(z_prior, z_posterior, sigma=kernel_sigma)
+
+    mmd_z_posterior = (  # z_posterior_kernel.mean()
+        z_posterior_kernel - z_posterior_kernel.diag().diag()
+    ).sum() / ((batch_size - 1) * batch_size)
+    mmd_z_prior = (  # z_prior_kernel.mean()
+        z_prior_kernel - z_prior_kernel.diag().diag()
+    ).sum() / ((batch_size - 1) * batch_size)
+    mmd_cross = cross_kernel.mean()
+    mmd_loss = mmd_z_posterior + mmd_z_prior - 2 * mmd_cross
+    loss = (
+        reconstruction_loss
+        + (1 - alpha) * kld_loss
+        + (alpha + lambd - 1) * mmd_loss
+    )
+    return dict(loss=loss, kld_loss=kld_loss, mmd_loss=mmd_loss)
