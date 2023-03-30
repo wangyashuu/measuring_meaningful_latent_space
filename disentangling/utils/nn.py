@@ -5,20 +5,26 @@ import torch.nn as nn
 
 
 ## define fully connected encoder and decoder
+# TODO: note https://stackoverflow.com/questions/39691902/ordering-of-batch-normalization-and-dropout
+
+conv_params = dict(kernel_size=3, stride=2, padding=1)
 
 
-def fc_encoder(input_shape, hiddens):
-    print("fc_encoder", input_shape, hiddens)
+def get_fc_encoder(input_shape, hiddens, batch_normed=True):
     layers = [nn.Flatten(start_dim=1)]
     n_in = torch.prod(torch.tensor(input_shape))
-    for h in hiddens:
-        layers.append(nn.Sequential(nn.Linear(n_in, h), nn.ReLU()))
+    for i, h in enumerate(hiddens):
+        if batch_normed:
+            layer = nn.Sequential(nn.Linear(n_in, h), nn.ReLU())
+            # layer = nn.Sequential(nn.Linear(n_in, h), nn.BatchNorm1d(h), nn.ReLU())
+        else:
+            layer = nn.Sequential(nn.Linear(n_in, h), nn.ReLU())
+        layers.append(layer)
         n_in = h
     return nn.Sequential(*layers)
 
 
-def fc_decoder(hiddens, output_shape):
-    print("fc_decoder", output_shape, hiddens)
+def get_fc_decoder(hiddens, output_shape):
     layers = []
     n_in = hiddens[0]
     for h in hiddens[1:]:
@@ -58,63 +64,44 @@ def conv2d_output_size(h_w, kernel_size=1, stride=1, padding=0, dilation=1):
     return (floor(h), floor(w)), (output_padding_h, output_padding_w)
 
 
-def cnn_encoder(input_shape: Tuple[int], hiddens: List[int]):
-    print("cnn_encoder", input_shape, hiddens)
+def get_cnn_encoder(input_shape: Tuple[int], hiddens: List[int]):
     output_paddings = []
     layers = []
     n_in, in_size = input_shape[0], input_shape[1:]
     # TODO question about the sequence of batch norm and activation
     for n_out in hiddens:
-        layers.append(
-            nn.Sequential(
-                nn.Conv2d(n_in, n_out, kernel_size=3, stride=2, padding=1),
-                nn.BatchNorm2d(n_out),
-                nn.LeakyReLU(),
-            )
+        layer = nn.Sequential(
+            nn.Conv2d(n_in, n_out, **conv_params),
+            nn.BatchNorm2d(n_out),
+            nn.LeakyReLU(),
         )
+        layers.append(layer)
         n_in = n_out
-        in_size, output_padding = conv2d_output_size(
-            in_size,
-            kernel_size=3,
-            stride=2,
-            padding=1,
-        )
+        in_size, output_padding = conv2d_output_size(in_size, **conv_params)
         output_paddings.append(output_padding)
     output_shape = (n_in,) + in_size
     return nn.Sequential(*layers), output_shape, output_paddings
 
 
-def cnn_decoder(hiddens: List[int], output_shape, output_paddings):
-    print("cnn_decoder", output_paddings, hiddens)
+def get_cnn_decoder(hiddens: List[int], output_shape, output_paddings):
     layers = []
     n_in = hiddens[0]
     for n_out, output_padding in zip(hiddens[1:], output_paddings):
-        layers.append(
-            nn.Sequential(
-                nn.ConvTranspose2d(
-                    n_in,
-                    n_out,
-                    kernel_size=3,
-                    stride=2,
-                    padding=1,
-                    output_padding=output_padding,
-                ),
-                nn.BatchNorm2d(n_out),
-                nn.LeakyReLU(),
-            )
+        layer = nn.Sequential(
+            nn.ConvTranspose2d(
+                n_in, n_out, output_padding=output_padding, **conv_params
+            ),
+            nn.BatchNorm2d(n_out),
+            nn.LeakyReLU(),
         )
+        layers.append(layer)
         n_in = n_out
 
     n_out = output_shape[0]
     layers.append(
         nn.Sequential(
             nn.ConvTranspose2d(
-                n_in,
-                n_out,
-                kernel_size=3,
-                stride=2,
-                padding=1,
-                output_padding=output_paddings[-1],
+                n_in, n_out, output_padding=output_paddings[-1], **conv_params
             ),
             nn.Sigmoid(),
         )

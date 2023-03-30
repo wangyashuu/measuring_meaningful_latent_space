@@ -1,0 +1,74 @@
+seed: 12
+output_dir: output
+latent_dim: 16
+n_epochs: 1
+metrics: []
+# metrics: ["monotonicity", "mig", "mig_sup", "dcimig", "sap", "modularity"]
+
+log_every_k_step: 100
+test_every_k_epoch: 1
+# "saved_state": "/root/innvariant-representations/output/checkpoints/epoch=79.ckpt",
+
+net_params:
+  - net_type: "cnn"
+    hiddens: [64, 64, 64, 64]
+  - net_type: "fc"
+    hiddens: [128, 32]
+
+data:
+  input_shape: [1, 64, 64]
+  name: "dSprites"
+  # includes:
+  #   3: [0, 0.8]
+  #   4: [0, 0.8]
+# data:
+#   name: "CelebA"
+#   input_shape: [3, 64, 64]
+
+dataloader:
+  train:
+    batch_size: 64
+    num_workers: 16
+    shuffle: true
+  val:
+    batch_size: 256
+    num_workers: 16
+
+optimizer:
+  name: "Adam"
+  lr: 0.0001
+
+# optimizer:
+#   name: "AdamW"
+#   lr: 0.0001
+#   weight_decay: 0
+
+scheduler:
+  name: "ExponentialLR"
+  gamma: 0.95
+
+# scheduler:
+#   name: "CosineAnnealingLR"
+#   T_max: 12
+#   eta_min: 0.00003
+
+fabric:
+  accelerator: "gpu"
+  devices: [1]
+
+
+# assistance_model:
+#   net_params:
+#     - net_type: "cnn"
+#       hiddens: [128, 128, 64, 64]
+#     - net_type: "fc"
+#       hiddens: [128, 32] # , 32, 16
+
+#   optimizers:
+#     - name: "AdamW"
+#       lr: 0.001
+#       weight_decay: 0
+
+#   schedulers:
+#     - name: "ExponentialLR"
+#       gamma: 0.99
