@@ -59,7 +59,7 @@ class VAE(AE):
         decoded = self.decoder(decoded)
         return decoded
 
-    def forward(self, input: Tensor) -> List[Tensor]:
+    def forward(self, input: Tensor, optimizer_idx: int = 0) -> List[Tensor]:
         encoded = self.encoder(input)
         encoded = self.post_encoder(encoded)
         latent_dim = encoded.shape[1] // 2
@@ -69,19 +69,21 @@ class VAE(AE):
         decoded = self.decoder(decoded)
         return decoded, mu, logvar, z
 
-    def loss_function(self, input: Tensor, output: Tensor, *args) -> dict:
-        decoded, mu, logvar, *_ = output
-        batch_size = decoded.shape[0]
-        reconstruction_loss = (
-            F.mse_loss(input, decoded, reduction="sum") / batch_size
-        )
-        kld_loss = (
-            -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-        ) / batch_size
 
-        loss = reconstruction_loss + kld_loss
-        return dict(
-            loss=loss,
-            reconstruction_loss=reconstruction_loss,
-            kld_loss=kld_loss,
-        )
+def compute_vae_loss(input, vae, *args, **kwargs) -> dict:
+    output = vae(input)
+    decoded, mu, logvar, *_ = output
+    batch_size = decoded.shape[0]
+    reconstruction_loss = (
+        F.mse_loss(input, decoded, reduction="sum") / batch_size
+    )
+    kld_loss = (
+        -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+    ) / batch_size
+
+    loss = reconstruction_loss + kld_loss
+    return dict(
+        loss=loss,
+        reconstruction_loss=reconstruction_loss,
+        kld_loss=kld_loss,
+    )
