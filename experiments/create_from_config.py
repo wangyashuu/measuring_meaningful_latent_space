@@ -36,7 +36,9 @@ def create_model_core(input_shape, params):
         encoder_output_shape = (fc_params["hiddens"][-1],)
         encoder = torch.nn.Sequential(cnn_encoder, fc_encoder)
         fc_decoder = get_fc_decoder(
-            hiddens=fc_params["hiddens"][::-1], output_shape=output_shape
+            hiddens=fc_params["hiddens"][::-1],
+            output_shape=output_shape,
+            is_output=False,
         )
         cnn_decoder = get_cnn_decoder(
             hiddens=cnn_params["hiddens"][::-1],
