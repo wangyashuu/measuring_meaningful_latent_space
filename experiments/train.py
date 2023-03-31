@@ -4,8 +4,6 @@ import torch
 import torchvision.utils as vutils
 from torch.utils.data import DataLoader
 from lightning.fabric import seed_everything, Fabric
-from lightning.fabric.loggers import TensorBoardLogger
-from lightning.fabric.strategies.ddp import DDPStrategy
 import wandb
 from tqdm import tqdm
 
@@ -157,6 +155,7 @@ def train(config):
             project="innvariant-representations",
             group=config.model_name,
             dir=config.output_dir,
+            config=config,
         )
 
     def log(data, columns=None, commit=False, step=None):
@@ -192,7 +191,7 @@ def train(config):
             loss = losses.get("loss") or next(iter(losses.values()))
             fabric.backward(loss)
             optimizer.step()
-            if step % config.log_every_k_step == 0:
+            if (step + 1) % config.log_every_k_step == 0:
                 log({f"train/{k}": v for k, v in losses.items()}, step=step)
             model.eval()
 
@@ -266,7 +265,7 @@ def train(config):
             ):
                 val_step(batch, batch_idx, step)
 
-            if epoch % config.test_every_k_epoch == 0:
+            if (epoch + 1) % config.test_every_k_epoch == 0:
                 outs = []
                 for batch_idx, batch in enumerate(val_loader):
                     outs.append(test_step(batch, batch_idx, step))
