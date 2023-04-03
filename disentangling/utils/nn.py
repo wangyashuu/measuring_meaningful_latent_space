@@ -10,7 +10,7 @@ import torch.nn as nn
 conv_params = dict(kernel_size=4, stride=2, padding=1)
 
 
-def get_fc_encoder(input_shape, hiddens, batch_norms=True, activations=True):
+def get_fc_encoder(input_shape, hiddens, batch_norms=False, activations=True):
     if type(batch_norms) is not list:
         batch_norms = [batch_norms] * len(hiddens)
     if type(activations) is not list:
@@ -32,7 +32,7 @@ def get_fc_encoder(input_shape, hiddens, batch_norms=True, activations=True):
 
 
 def get_fc_decoder(
-    hiddens, output_shape, batch_norms=True, activations=True, is_output=True
+    hiddens, output_shape, batch_norms=False, activations=True, is_output=True
 ):
     if type(batch_norms) is not list:
         batch_norms = [batch_norms] * len(hiddens)
@@ -55,12 +55,7 @@ def get_fc_decoder(
         n_in = h
 
     if is_output:
-        layers.append(
-            nn.Sequential(
-                nn.Linear(n_in, unflatten_input_dims),
-                nn.Sigmoid(),
-            )
-        )
+        layers.append(nn.Linear(n_in, unflatten_input_dims))
 
     layers.append(nn.Unflatten(1, output_shape))
     return nn.Sequential(*layers)
@@ -93,7 +88,7 @@ def conv2d_output_size(h_w, kernel_size=1, stride=1, padding=0, dilation=1):
 def get_cnn_encoder(
     input_shape: Tuple[int],
     hiddens: List[int],
-    batch_norms=True,
+    batch_norms=False,
     activations=True,
 ):
     if type(batch_norms) is not list:
@@ -127,7 +122,7 @@ def get_cnn_decoder(
     hiddens: List[int],
     output_shape,
     output_paddings,
-    batch_norms=True,
+    batch_norms=False,
     activations=True,
 ):
     if type(batch_norms) is not list:
@@ -155,11 +150,8 @@ def get_cnn_decoder(
         n_in = n_out
     n_out = output_shape[0]
     layers.append(
-        nn.Sequential(
-            nn.ConvTranspose2d(
-                n_in, n_out, output_padding=output_paddings[-1], **conv_params
-            ),
-            nn.Sigmoid(),
-        )
+        nn.ConvTranspose2d(
+            n_in, n_out, output_padding=output_paddings[-1], **conv_params
+        ),
     )
     return nn.Sequential(*layers)
