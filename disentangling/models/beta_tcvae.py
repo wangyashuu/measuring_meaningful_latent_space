@@ -2,10 +2,10 @@ from typing import Tuple
 
 import torch
 from torch import Tensor, nn
-from torch.nn import functional as F
+from torch.distributions.normal import Normal
 
 from .vae import VAE
-from torch.distributions.normal import Normal
+from ..utils.loss import get_reconstruction_loss, get_kld_loss
 
 
 def log_density_gaussian(x: Tensor, mu: Tensor, logvar: Tensor):
@@ -75,6 +75,7 @@ def compute_beta_tcvae_loss(
     tc_loss_factor,
     dimension_wise_kl_loss_factor,
     dataset_size,
+    distribution="bernoulli",
     *args,
     **kwargs,
 ) -> dict:
@@ -84,9 +85,8 @@ def compute_beta_tcvae_loss(
     batch_size = decoded.shape[0]
     std = torch.exp(0.5 * logvar)
 
-    reconstruction_loss = (
-        F.mse_loss(input, decoded, reduction="sum") / batch_size
-    )
+    reconstruction_loss = get_reconstruction_loss(decoded, input, distribution)
+    kld_loss = get_kld_loss(mu, logvar)  # for log
 
     log_p_z = Normal(0, 1).log_prob(z).sum(-1)
     log_q_z_given_x = Normal(mu, std).log_prob(z).sum(-1)
@@ -141,4 +141,5 @@ def compute_beta_tcvae_loss(
         mutual_info_loss=mutual_info_loss,
         tc_loss=tc_loss,
         dimension_wise_kl_loss=dimension_wise_kl_loss,
+        kld_loss=kld_loss,
     )

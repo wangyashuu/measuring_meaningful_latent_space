@@ -2,9 +2,9 @@ from typing import List, Tuple
 
 import torch
 from torch import nn, Tensor
-from torch.nn import functional as F
 
 from .ae import AE
+from ..utils.loss import get_reconstruction_loss, get_kld_loss
 
 
 def reparameterize(mu: Tensor, logvar: Tensor) -> Tensor:
@@ -70,17 +70,13 @@ class VAE(AE):
         return decoded, mu, logvar, z
 
 
-def compute_vae_loss(input, vae, *args, **kwargs) -> dict:
+def compute_vae_loss(
+    input, vae, distribution="bernoulli", *args, **kwargs
+) -> dict:
     output = vae(input)
     decoded, mu, logvar, *_ = output
-    batch_size = decoded.shape[0]
-    reconstruction_loss = (
-        F.mse_loss(input, decoded, reduction="sum") / batch_size
-    )
-    kld_loss = (
-        -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-    ) / batch_size
-
+    reconstruction_loss = get_reconstruction_loss(decoded, input, distribution)
+    kld_loss = get_kld_loss(mu, logvar)
     loss = reconstruction_loss + kld_loss
     return dict(
         loss=loss,

@@ -2,9 +2,9 @@ from typing import Tuple
 
 import torch
 from torch import nn
-from torch.nn import functional as F
 
 from .vae import VAE
+from ..utils.loss import get_reconstruction_loss, get_kld_loss
 
 
 class DIPVAE(VAE):
@@ -26,20 +26,24 @@ class DIPVAE(VAE):
 
 
 def compute_dip_vae_loss(
-    input, dip_vae, dip_type, lambda_od, lambda_d, *args, **kwargs
+    input,
+    dip_vae,
+    dip_type,
+    lambda_od,
+    lambda_d,
+    distribution="bernoulli",
+    *args,
+    **kwargs,
 ) -> dict:
     output = dip_vae(input)
     decoded, mu, logvar, z = output
-    batch_size = decoded.shape[0]
-    reconstruction_loss = (
-        F.mse_loss(input, decoded, reduction="sum") / batch_size
-    )
-    kld_loss = (
-        -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-    ) / batch_size
+
+    reconstruction_loss = get_reconstruction_loss(decoded, input, distribution)
+    kld_loss = get_kld_loss(mu, logvar)
+
+    # cov(mu) = E(mu*mu^T) - E(mu)*E(mu)^T
     expectation_mu_mu_t = (mu[:, :, None] @ mu[:, None, :]).mean(0)
     expectation_mu = mu.mean(0)
-    # TODO: how to compute covariance
     cov_mu = (
         expectation_mu_mu_t - expectation_mu[None, :] @ expectation_mu[:, None]
     )
@@ -53,9 +57,11 @@ def compute_dip_vae_loss(
         cov_z = expectation_cov + cov_mu
         target_cov = cov_z
     else:
-        raise NotImplementedError(f"dip_type = {dip_type}")
+        raise NotImplementedError(
+            f"compute_dip_vae_loss dip_type = {dip_type}"
+        )
     diag = torch.diagonal(target_cov, offset=0, dim1=-2, dim2=-1)
-    off_diag = diag - torch.diag_embed(diag, offset=0, dim1=-2, dim2=-1)
+    off_diag = target_cov - torch.diag_embed(diag, offset=0, dim1=-2, dim2=-1)
     dip_loss = lambda_od * torch.sum(off_diag**2) + lambda_d * torch.sum(
         (diag - 1) ** 2
     )
