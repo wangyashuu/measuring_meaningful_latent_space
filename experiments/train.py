@@ -1,6 +1,8 @@
 import os
+from pathlib import Path
 
 import torch
+import torch.nn.functional as F
 import torchvision.utils as vutils
 from torch.utils.data import DataLoader
 from lightning.fabric import seed_everything, Fabric
@@ -77,7 +79,7 @@ def init(config):
 def samples(vae, size=144):
     latents = torch.randn((size,) + vae.latent_space, device=vae.device)
     samples = vae.decode(latents)
-    image = vutils.make_grid(samples, normalize=False, nrow=12)
+    image = vutils.make_grid(F.sigmoid(samples), normalize=False, nrow=12)
     return dict(samples=image)
 
 
@@ -86,7 +88,7 @@ def reconstructs(vae, dataset, size=144):
     x = x.to(vae.device)
     result = vae(x)
     reconstructions = result[0] if type(result) == tuple else result
-    image = vutils.make_grid(reconstructions, normalize=False, nrow=12)
+    image = vutils.make_grid(F.sigmoid(reconstructions), normalize=False, nrow=12)
     x_image = vutils.make_grid(x, normalize=False, nrow=12)
     return dict(reconstructions=image, originals=x_image)
 
@@ -128,6 +130,9 @@ def train(config):
     fabric = Fabric(**config.fabric, strategy="ddp")
     fabric.launch()
 
+    output_dir = Path(config.output_dir) / config.model_name
+    output_dir.mkdir(parents=True, exist_ok=True)
+
     from_n_epoch = 0
     if "saved_state" in config:
         # torch.load issues
@@ -154,7 +159,7 @@ def train(config):
         run = wandb.init(
             project="innvariant-representations",
             group=config.model_name,
-            dir=config.output_dir,
+            dir=output_dir,
             config=config,
         )
 
@@ -218,8 +223,8 @@ def train(config):
                 **reconstructs(vae=models[0], dataset=val_loader.dataset),
             }
             log(images, step=step)
-            # Y, Y_hat = [torch.vstack(out).cpu().numpy() for out in zip(*outs)]
-            # log(run_metrics(Y, Y_hat, metric_funcs), step=step)
+            Y, Y_hat = [torch.vstack(out).cpu().numpy() for out in zip(*outs)]
+            log(run_metrics(Y, Y_hat, metric_funcs), step=step)
             # log(*check_correlation(Y, Y_hat), step=step)
 
     def start_epoch(epoch, step):
@@ -236,10 +241,9 @@ def train(config):
                 *[o.state_dict() for o in optimizers],
                 *[s.state_dict() for s in schedulers],
             ]
-            save_path = os.path.join(
-                config.output_dir, "checkpoints", f"epoch={epoch}.ckpt"
-            )
-            torch.save((state_dicts, epoch), save_path)
+            save_path = output_dir / "checkpoints"
+            save_path.mkdir(exist_ok=True)
+            torch.save((state_dicts, epoch), save_path / f"epoch={epoch}.ckpt")
         log({}, step=step, commit=True)
 
     for epoch in range(from_n_epoch, config.n_epochs):
