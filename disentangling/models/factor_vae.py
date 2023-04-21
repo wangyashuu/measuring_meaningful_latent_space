@@ -4,7 +4,11 @@ import torch
 from torch import nn, Tensor
 import torch.nn.functional as F
 from .vae import VAE
-from ..utils.loss import get_reconstruction_loss, get_kld_loss
+from ..utils.loss import (
+    get_reconstruction_loss,
+    get_kld_loss,
+    get_kld_decomposed_losses,
+)
 
 
 def permute_latent(z):
@@ -48,7 +52,15 @@ def compute_factor_vae_loss(
 
     reconstruction_loss = get_reconstruction_loss(decoded, input, distribution)
     kld_loss = get_kld_loss(mu, logvar)
-   
+
+    (
+        mutual_info_loss,
+        tc_loss,
+        dimension_wise_kl_loss,
+    ) = get_kld_decomposed_losses(
+        z, mu, logvar, dataset_size=kwargs.pop("dataset_size")
+    )
+
     ###
     # D(z) is the prob of the input from q(z) rather than from ̄q(z)
     # logits is the logits that used to computed the probabilty.
@@ -59,13 +71,18 @@ def compute_factor_vae_loss(
     # log(D(z) / 1 - D(z)) = logit_qz - logit_q̄z
     ###
     z_logits = factor_vae_discriminator(z)
-    tc_loss = torch.mean(z_logits[:, 0] - z_logits[:, 1])
-    loss = reconstruction_loss + kld_loss + tc_loss_factor * tc_loss
+    discriminator_tc_loss = torch.mean(z_logits[:, 0] - z_logits[:, 1])
+    loss = (
+        reconstruction_loss + kld_loss + tc_loss_factor * discriminator_tc_loss
+    )
     return dict(
         loss=loss,
         reconstruction_loss=reconstruction_loss,
         kld_loss=kld_loss,
+        discriminator_tc_loss=discriminator_tc_loss,
+        mutual_info_loss=mutual_info_loss,
         tc_loss=tc_loss,
+        dimension_wise_kl_loss=dimension_wise_kl_loss,
     )
 
 
@@ -99,23 +116,14 @@ def compute_factor_vae_discriminator_loss(
     input, factor_vae, factor_vae_discriminator, *args, **kwargs
 ):
     vae_output = factor_vae(input)
-    batch_size = input.shape[0]
-    ones = torch.ones(batch_size, dtype=torch.long, device=input.device)
-    zeros = torch.zeros(batch_size, dtype=torch.long, device=input.device)
     decoded, mu, logvar, z = vae_output
     z = z.detach()  # TODO: remove this
     z_permuted = permute_latent(z)
-    # z_logits_all = factor_vae_discriminator(torch.vstack([z, z_permuted]))
-    # z_logits = z_logits_all[:batch_size]
-    # z_logits_permuted = z_logits_all[batch_size:]
-
-    z_logits, z_logits_permuted = (
-        factor_vae_discriminator.backbone(z),
-        factor_vae_discriminator.backbone(z_permuted),
-    )
+    z_logits = factor_vae_discriminator(z)
+    z_permuted_logits = factor_vae_discriminator(z_permuted)
     # encourage z_logit to zero (z_prob[0] to be one)
-    discriminator_loss = 0.5 * (
-        F.cross_entropy(z_logits, zeros)  # => encourage [1, 0]
-        + F.cross_entropy(z_logits_permuted, ones)  # encourage [0, 1]
+    discriminator_loss = -0.5 * (
+        torch.mean(torch.log(F.softmax(z_logits)[:, 0]))
+        + torch.mean(torch.log(F.softmax(z_permuted_logits)[:, 1]))
     )
     return dict(discriminator_loss=discriminator_loss)

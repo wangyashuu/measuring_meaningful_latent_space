@@ -32,8 +32,8 @@ def rbf_kernel(z1, z2, sigma):
     """
     n_latent_dim = z1.shape[1]
     k = torch.exp(
-        -torch.norm(z1.unsqueeze(1) - z2.unsqueeze(0), dim=-1) ** 2
-        / (2.0 * n_latent_dim * sigma**2)
+        -torch.mean((z1[:, None, :] - z2[None, :, :]) ** 2, dim=-1)
+        / (1.0 * n_latent_dim * sigma**2)
     )
     return k
 
@@ -73,32 +73,31 @@ def compute_info_vae_loss(
 
     output = info_vae(input)
     decoded, mu, logvar, z = output
-    batch_size = decoded.shape[0]
 
     reconstruction_loss = get_reconstruction_loss(decoded, input, distribution)
     kld_loss = get_kld_loss(mu, logvar)
 
-    z_posterior = z
     z_prior = torch.randn_like(z, device=z.device)
-
+    z_posterior = z
     compute_kernel = rbf_kernel if kernel_type == "rbf" else imq_kernel
+    z_prior_kernel = compute_kernel(z_prior, z_prior, sigma=kernel_sigma)
     z_posterior_kernel = compute_kernel(
         z_posterior, z_posterior, sigma=kernel_sigma
     )
-    z_prior_kernel = compute_kernel(z_prior, z_prior, sigma=kernel_sigma)
     cross_kernel = compute_kernel(z_prior, z_posterior, sigma=kernel_sigma)
-
-    mmd_z_posterior = (  # z_posterior_kernel.mean()
-        z_posterior_kernel - z_posterior_kernel.diag().diag()
-    ).sum() / ((batch_size - 1) * batch_size)
-    mmd_z_prior = (  # z_prior_kernel.mean()
-        z_prior_kernel - z_prior_kernel.diag().diag()
-    ).sum() / ((batch_size - 1) * batch_size)
-    mmd_cross = cross_kernel.mean()
-    mmd_loss = mmd_z_posterior + mmd_z_prior - 2 * mmd_cross
+    mmd_loss = (
+        z_posterior_kernel.mean()
+        + z_prior_kernel.mean()
+        - 2 * cross_kernel.mean()
+    )
     loss = (
         reconstruction_loss
         + (1 - alpha) * kld_loss
         + (alpha + lambd - 1) * mmd_loss
     )
-    return dict(loss=loss, kld_loss=kld_loss, mmd_loss=mmd_loss)
+    return dict(
+        loss=loss,
+        reconstruction_loss=reconstruction_loss,
+        kld_loss=kld_loss,
+        mmd_loss=mmd_loss,
+    )
