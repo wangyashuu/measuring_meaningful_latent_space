@@ -1,5 +1,6 @@
 from torch import Tensor, nn
-from torch.nn import functional as F
+
+from ..utils.loss import get_reconstruction_loss
 
 
 class AE(nn.Module):
@@ -24,12 +25,11 @@ class AE(nn.Module):
         return decoded
 
 
-def compute_ae_loss(input, ae, *args, **kwargs) -> dict:
+def compute_ae_loss(
+    input, ae, distribution="bernoulli", *args, **kwargs
+) -> dict:
     output = ae(input)
     decoded = output
-    batch_size = decoded.shape[0]
-    reconstruction_loss = (
-        F.mse_loss(input, decoded, reduction="sum") / batch_size
-    )
+    reconstruction_loss = get_reconstruction_loss(decoded, input, distribution)
     loss = reconstruction_loss
     return dict(loss=loss)

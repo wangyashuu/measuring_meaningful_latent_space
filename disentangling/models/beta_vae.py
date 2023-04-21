@@ -2,9 +2,9 @@ from typing import Tuple
 
 import torch
 from torch import Tensor, nn
-from torch.nn import functional as F
 
 from .vae import VAE
+from ..utils.loss import get_reconstruction_loss, get_kld_loss
 
 
 class BetaVAE(VAE):
@@ -32,18 +32,14 @@ def compute_beta_vae_loss(
     c_max=None,
     n_c_steps=None,
     step=None,
+    distribution="bernoulli",
     *args,
     **kwargs
 ) -> dict:
     output = beta_vae(input)
     decoded, mu, logvar, *_ = output
-    batch_size = decoded.shape[0]
-    reconstruction_loss = (
-        F.mse_loss(input, decoded, reduction="sum") / batch_size
-    )
-    kld_loss = (
-        -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-    ) / batch_size
+    reconstruction_loss = get_reconstruction_loss(decoded, input, distribution)
+    kld_loss = get_kld_loss(mu, logvar)
 
     if c_max is not None:
         c = torch.clamp((step / n_c_steps) * c_max, 0, c_max)

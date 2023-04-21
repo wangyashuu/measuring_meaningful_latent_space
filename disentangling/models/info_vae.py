@@ -2,9 +2,9 @@ from typing import Tuple
 
 import torch
 from torch import nn
-from torch.nn import functional as F
 
 from .vae import VAE
+from ..utils.loss import get_reconstruction_loss, get_kld_loss
 
 
 def imq_kernel(z1, z2, sigma, scales=[1.0]):
@@ -63,6 +63,7 @@ def compute_info_vae_loss(
     lambd,
     kernel_type="rbf",
     kernel_sigma=1,
+    distribution="bernoulli",
     *args,
     **kwargs
 ) -> dict:
@@ -74,12 +75,8 @@ def compute_info_vae_loss(
     decoded, mu, logvar, z = output
     batch_size = decoded.shape[0]
 
-    reconstruction_loss = (
-        F.mse_loss(input, decoded, reduction="sum") / batch_size
-    )
-    kld_loss = (
-        -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-    ) / batch_size
+    reconstruction_loss = get_reconstruction_loss(decoded, input, distribution)
+    kld_loss = get_kld_loss(mu, logvar)
 
     z_posterior = z
     z_prior = torch.randn_like(z, device=z.device)
