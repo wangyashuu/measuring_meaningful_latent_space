@@ -1,0 +1,46 @@
+beta_vae:
+  loss_kwargs:
+    beta: 2 # 2, 4, 6, 8, 16
+    # beta: 100
+    # n_c_steps: 100000
+    # c_max: 20
+
+beta_tcvae:
+  loss_kwargs:
+    mutual_info_loss_factor: 1.0
+    tc_loss_factor: 2.0
+    dimension_wise_kl_loss_factor: 1.0
+    minibatch_stratified_sampling: true # false
+
+factor_vae:
+  loss_kwargs:
+    tc_loss_factor: 35
+
+  auxiliary:
+    model:
+      name: "factor_vae_discriminator"
+    optimizer:
+      name: "Adam"
+      lr: 0.0001
+      betas: [0.5, 0.9]
+
+info_vae:
+  loss_kwargs:
+    alpha: 0
+    lambd: 8600 # 28*28*50
+
+dip_vae:
+  loss_kwargs:
+    dip_type: "i"
+    lambda_od: 10
+    lambda_d: 100
+    # dip_type: "ii"
+    # lambda_od: 5
+    # lambda_d: 5
+
+vq_vae:
+  n_embeddings: 1024
+  n_embedding_dim: 64
+  commitment_loss_factor: 0.25
+  ema_enabled: true
+  ema_decay: 0.99

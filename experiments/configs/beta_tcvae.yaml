@@ -1,6 +1,0 @@
-model_name: "beta_tcvae"
-loss_kwargs:
-  mutual_info_loss_factor: 1.0
-  tc_loss_factor: 4.0
-  dimension_wise_kl_loss_factor: 1.0
-  minibatch_stratified_sampling: true
