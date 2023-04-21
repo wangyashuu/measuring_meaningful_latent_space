@@ -1,5 +1,5 @@
 import numpy as np
-from .mi import get_mutual_infos, get_entropies
+from ..utils.mi import get_mutual_infos, get_entropies
 
 """Mutual Information Gap from the beta-TC-VAE paper.
 Based on "Isolating Sources of Disentanglement in Variational Autoencoders"

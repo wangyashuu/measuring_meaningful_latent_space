@@ -1,5 +1,5 @@
 import numpy as np
-from .mi import get_mutual_infos
+from ..utils.mi import get_mutual_infos
 
 
 """
