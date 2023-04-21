@@ -1,4 +1,0 @@
-model_name: "info_vae"
-loss_kwargs:
-  alpha: 0
-  lambd: 100

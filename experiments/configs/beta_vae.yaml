@@ -1,3 +1,0 @@
-model_name: "beta_vae"
-loss_kwargs:
-  beta: 4

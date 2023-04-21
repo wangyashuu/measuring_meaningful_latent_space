@@ -1,8 +1,0 @@
-model_name: "dip_vae"
-loss_kwargs:
-  dip_type: "i"
-  lambda_od: 2
-  lambda_d: 20
-  # dip_type: "ii"
-  # lambda_od: 2
-  # lambda_d: 2

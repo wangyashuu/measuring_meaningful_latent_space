@@ -1,22 +1,25 @@
-seed: 12
+seed: 1
 output_dir: output
-latent_dim: 16
-n_epochs: 1
+latent_dim: 10
+n_epochs: 128
 metrics: []
-# metrics: ["monotonicity", "mig", "mig_sup", "dcimig", "sap", "modularity"]
+# metrics: ["monotonicity", "mig", "mig_sup", "dcimig", "sap", ]
 
-log_every_k_step: 100
-test_every_k_epoch: 1
-# "saved_state": "/root/innvariant-representations/output/checkpoints/epoch=79.ckpt",
+n_steps_log_every: 1600
+n_epochs_test_every: 0
+n_epochs_save_every: 8
+# saved_state: "/root/innvariant-representations/output/checkpoints/epoch=99.ckpt"
 
 net_params:
   - net_type: "cnn"
-    hiddens: [64, 64, 64, 64]
+    hiddens: [32, 32, 64, 64]
   - net_type: "fc"
-    hiddens: [128, 32]
+    hiddens: [256]
 
 data:
   input_shape: [1, 64, 64]
+  train_rate: 0.9
+  random_state: 1
   name: "dSprites"
   # includes:
   #   3: [0, 0.8]
@@ -28,15 +31,14 @@ data:
 dataloader:
   train:
     batch_size: 64
-    num_workers: 16
     shuffle: true
   val:
     batch_size: 256
-    num_workers: 16
+
 
 optimizer:
   name: "Adam"
-  lr: 0.0001
+  lr: 0.0005
 
 # optimizer:
 #   name: "AdamW"
@@ -49,26 +51,5 @@ scheduler:
 
 # scheduler:
 #   name: "CosineAnnealingLR"
-#   T_max: 12
-#   eta_min: 0.00003
-
-fabric:
-  accelerator: "gpu"
-  devices: [1]
-
-
-# assistance_model:
-#   net_params:
-#     - net_type: "cnn"
-#       hiddens: [128, 128, 64, 64]
-#     - net_type: "fc"
-#       hiddens: [128, 32] # , 32, 16
-
-#   optimizers:
-#     - name: "AdamW"
-#       lr: 0.001
-#       weight_decay: 0
-
-#   schedulers:
-#     - name: "ExponentialLR"
-#       gamma: 0.99
+#   T_max: 4
+#   eta_min: 0.00005
