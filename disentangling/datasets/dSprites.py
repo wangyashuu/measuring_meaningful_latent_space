@@ -2,6 +2,7 @@ from urllib import request
 import os.path
 
 import numpy as np
+import torch
 from torch.utils.data import Dataset, random_split, Subset
 import torchvision.transforms as transforms
 
@@ -22,18 +23,13 @@ class DSprites(Dataset):
         # Data was saved originally using python2, so we need to set the encoding.
         data = np.load(file_path, encoding="latin1", allow_pickle=True)
         metadata = data["metadata"][()]
-        self.data = data
-        self.images = data["imgs"] * 255  # [:, None] increase the channel dim
+        self.images = data["imgs"] * 255
         self.metadata = metadata
         selected_latents = metadata["latents_sizes"] > 1
         self.latents = data["latents_values"][:, selected_latents]
         self.latent_classes = data["latents_classes"][:, selected_latents]
         self.transform = transform or transforms.ToTensor()
-
-    @property
-    def latents_sizes(self):
-        selected_latents = self.metadata["latents_sizes"] > 1
-        return self.metadata["latents_sizes"][selected_latents]
+        self.latents_sizes = metadata["latents_sizes"][selected_latents]
 
     def __len__(self):
         return len(self.images)
@@ -83,7 +79,7 @@ def select_index_by_range(latents_sizes, includes, excludes):
     return selected
 
 
-def dSprites(train_rate=0.8, includes=None, excludes=None):
+def dSprites(train_rate=0.8, random_state=None, includes=None, excludes=None):
     dSprites = DSprites()
     size = len(dSprites)
     if includes is not None or excludes is not None:
@@ -95,5 +91,11 @@ def dSprites(train_rate=0.8, includes=None, excludes=None):
     else:
         train_size = int(size * train_rate)
         val_size = size - train_size
-        train_set, val_set = random_split(dSprites, [train_size, val_size])
+        if random_state is not None:
+            generator = torch.Generator().manual_seed(random_state)
+            train_set, val_set = random_split(
+                dSprites, [train_size, val_size], generator=generator
+            )
+        else:
+            train_set, val_set = random_split(dSprites, [train_size, val_size])
     return train_set, val_set
