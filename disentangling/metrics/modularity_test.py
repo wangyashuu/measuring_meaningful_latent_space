@@ -10,7 +10,6 @@ from .utils import (
     m1c0i1,
     m1c1i0,
     m1c1i1,
-    m0c1_PCA,
 )
 
 from .modularity import modularity

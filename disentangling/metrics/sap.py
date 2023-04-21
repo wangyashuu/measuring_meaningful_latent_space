@@ -1,5 +1,6 @@
 import numpy as np
-from sklearn import svm
+from sklearn.model_selection import train_test_split
+from cuml import svm
 
 """
 Implementation of the SAP score.
@@ -11,24 +12,31 @@ Reference Implementation: https://github.com/google-research/disentanglement_lib
 """
 
 
-def get_score_matrix(codes, factors, discreted_factor=False):
-    n_codes = codes.shape[1]
-    n_factors = factors.shape[1]
-    batch_size = codes.shape[0]
-    train_size = int(batch_size * 0.8)
-    X_train, y_train = codes[:train_size], factors[:train_size]
-    X_test, y_test = codes[train_size:], factors[train_size:]
+def get_score_matrix(
+    codes, factors, discreted_factors=False, test_size=0.2, random_state=None
+):
+    n_factors, n_codes = factors.shape[1], codes.shape[1]
+    if type(discreted_factors) is not list:
+        discreted_factors = [discreted_factors] * n_factors
+    X_train, X_test, y_train, y_test = train_test_split(
+        codes, factors, test_size=test_size, random_state=random_state
+    )
     score_matrix = np.zeros([n_codes, n_factors])
     for i in range(n_codes):
-        for j in range(n_factors):
+        for j, discreted_factor in enumerate(discreted_factors):
             x_i = X_train[:, i]
             y_j = y_train[:, j]
             if discreted_factor:
                 x_i_test = X_test[:, i]
                 y_j_test = y_test[:, j]
-                classifier = svm.LinearSVC(C=0.01, class_weight="balanced")
-                classifier.fit(x_i[:, np.newaxis], y_j)
-                pred = classifier.predict(x_i_test[:, np.newaxis])
+                classifier = svm.LinearSVC(C=0.01)
+                classifier.fit(
+                    x_i[:, np.newaxis].astype(np.float32),
+                    y_j.astype(np.float32),
+                )
+                pred = classifier.predict(
+                    x_i_test[:, np.newaxis].astype(np.float32)
+                )
                 score_matrix[i, j] = np.mean(pred == y_j_test)
             else:
                 cov_x_i_y_j = np.cov(x_i, y_j, ddof=1)
@@ -42,8 +50,16 @@ def get_score_matrix(codes, factors, discreted_factor=False):
     return score_matrix
 
 
-def sap(factors, codes):
-    matrix = get_score_matrix(codes, factors)
+def sap(
+    factors, codes, discreted_factors=False, test_size=0.2, random_state=None
+):
+    matrix = get_score_matrix(
+        codes,
+        factors,
+        discreted_factors=discreted_factors,
+        test_size=test_size,
+        random_state=random_state,
+    )
     sorted = np.sort(matrix, axis=0)
     score = np.mean(sorted[-1, :] - sorted[-2, :])
     return score
