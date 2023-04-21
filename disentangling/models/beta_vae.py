@@ -42,7 +42,8 @@ def compute_beta_vae_loss(
     kld_loss = get_kld_loss(mu, logvar)
 
     if c_max is not None:
-        c = torch.clamp((step / n_c_steps) * c_max, 0, c_max)
+        c_max = torch.tensor(c_max, device=input.device)
+        c = torch.clamp(c_max * (step / n_c_steps), 0, c_max)
         loss = reconstruction_loss + beta * (kld_loss - c).abs()
         return dict(
             loss=loss,

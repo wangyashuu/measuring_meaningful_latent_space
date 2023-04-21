@@ -1,7 +1,26 @@
 import scipy
 import numpy as np
-from sklearn import ensemble
 from sklearn.model_selection import train_test_split
+from sklearn.ensemble import (
+    GradientBoostingClassifier,
+    HistGradientBoostingClassifier,
+)
+
+# from lightgbm import LGBMClassifier
+from xgboost import XGBClassifier
+
+
+def dci_ad_hoc_model(model_name="XGBClassifier"):
+    if model_name == "XGBClassifier":
+        return XGBClassifier(tree_method="gpu_hist")
+    elif model_name == "GradientBoostingClassifier":
+        return GradientBoostingClassifier()
+    elif model_name == "HistGradientBoostingClassifier":
+        return HistGradientBoostingClassifier(
+            max_iter=10, early_stopping=False
+        )
+    return NotImplementedError(f"dci_ad_hoc_model model_name = {model_name}")
+
 
 """
 Implementation of Disentanglement, Completeness and Informativeness.
@@ -12,7 +31,64 @@ Adapted from: https://github.com/google-research/disentanglement_lib
 """
 
 
-def dci(factors, codes, test_size=0.3, random_state=None):
+def label_transformer(train_data):
+    classes = np.unique(train_data)
+
+    def transform(new_data):
+        nonlocal classes
+        new_classes = np.array(list(set(np.unique(new_data)) - set(classes)))
+        classes = np.hstack([classes, new_classes])
+        indices = (new_data == classes.reshape(-1, 1)).argmax(axis=0)
+        return indices
+
+    return transform
+
+
+def dci(factors, codes, test_size=0.3, random_state=None, **kwargs):
+    return dci_gpu(
+        factors,
+        codes,
+        test_size=test_size,
+        random_state=random_state,
+        **kwargs,
+    )
+
+
+def dci_gpu(factors, codes, test_size=0.3, random_state=None, **kwargs):
+    """
+    Args:
+        factors: the real generative factors (batch_size, factor_dims).
+        codes: the latent codes (batch_size, code_dims).
+    Returns:
+        scores: Dictionary with average disentanglement score, completeness and
+        informativeness (train and test).
+    """
+    n_factors = factors.shape[1]
+    n_codes = codes.shape[1]
+    x_train, x_test, y_train, y_test = train_test_split(
+        codes, factors, test_size=test_size, random_state=random_state
+    )
+    importances, train_accuracies, test_accuracies = [], [], []
+    for i in range(n_factors):
+        transform = label_transformer(y_train[:, i])
+        y_train_encoded = transform(y_train[:, i])
+        y_test_encoded = transform(y_test[:, i])
+        model = dci_ad_hoc_model()
+        model.fit(x_train, y_train_encoded)
+        importances.append(np.abs(model.feature_importances_))
+        train_accuracies.append(model.score(x_train, y_train_encoded))
+        test_accuracies.append(model.score(x_test, y_test_encoded))
+    importance_matrix = np.stack(importances, axis=1)
+    train_accuracy = np.mean(train_accuracies)
+    test_accuracy = np.mean(test_accuracies)
+
+    d_score = disentanglement(importance_matrix)
+    c_score = completeness(importance_matrix)
+    i_score = test_accuracy
+    return dict(d=d_score, c=c_score, i=i_score, i_train=train_accuracy)
+
+
+def dci_from_lib(factors, codes, test_size=0.3, random_state=None, **kwargs):
     """
     Args:
         factors: the real generative factors (batch_size, factor_dims).
@@ -30,18 +106,21 @@ def dci(factors, codes, test_size=0.3, random_state=None):
 def _compute_dci(mus_train, ys_train, mus_test, ys_test):
     """Computes score based on both training and testing codes and factors."""
     scores = {}
+
     importance_matrix, train_err, test_err = compute_importance_gbt(
         mus_train, ys_train, mus_test, ys_test
     )
     assert importance_matrix.shape[0] == mus_train.shape[0]
     assert importance_matrix.shape[1] == ys_train.shape[0]
+    d = disentanglement(importance_matrix)
+    c = completeness(importance_matrix)
     scores["informativeness_train"] = train_err
     scores["informativeness_test"] = test_err
-    scores["disentanglement"] = disentanglement(importance_matrix)
-    scores["completeness"] = completeness(importance_matrix)
+    scores["disentanglement"] = d
+    scores["completeness"] = c
     scores["i"] = test_err
-    scores["d"] = disentanglement(importance_matrix)
-    scores["c"] = completeness(importance_matrix)
+    scores["d"] = d
+    scores["c"] = c
     return scores
 
 
@@ -55,7 +134,7 @@ def compute_importance_gbt(x_train, y_train, x_test, y_test):
     train_loss = []
     test_loss = []
     for i in range(num_factors):
-        model = ensemble.GradientBoostingClassifier()
+        model = GradientBoostingClassifier()
         model.fit(x_train.T, y_train[i, :])
         importance_matrix[:, i] = np.abs(model.feature_importances_)
         train_loss.append(np.mean(model.predict(x_train.T) == y_train[i, :]))

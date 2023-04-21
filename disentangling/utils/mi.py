@@ -58,12 +58,12 @@ def mutual_info_cc(X, y, distance_metric="chebyshev", n_neighbors=3):
 
     # KDTree is explicitly fit to allow for the querying of number of
     # neighbors within a specified radius
-    kd = KDTree(X, metric=distance_metric)
-    nx = kd.query_radius(X, radius, count_only=True)
+    x_tree = KDTree(X, metric=distance_metric)
+    nx = x_tree.query_radius(X, radius, count_only=True)
     nx = np.array(nx) - 1.0
 
-    kd = KDTree(y, metric=distance_metric)
-    ny = kd.query_radius(y, radius, count_only=True)
+    y_tree = KDTree(y, metric=distance_metric)
+    ny = y_tree.query_radius(y, radius, count_only=True)
     ny = np.array(ny) - 1.0
 
     mi = (
@@ -105,8 +105,8 @@ def mutual_info_cd(X, y, n_neighbors=3):
     # if X_masked.shape[0] == 0:
     #     m_all = 0
     # else:
-    kd = KDTree(X_masked)
-    m_all = kd.query_radius(
+    tree = KDTree(X_masked)
+    m_all = tree.query_radius(
         X_masked, radius, count_only=True, return_distance=False
     )
     m_all = np.array(m_all) - 1.0
@@ -318,10 +318,11 @@ def get_captured_mi_from_factor(
         return mi_max
 
 
-def get_captured_mis(codes, factors, *args, **kwargs):
+def get_captured_mis(codes, factors, discrete_factors=False, *args, **kwargs):
     n_codes = codes.shape[1]
     n_factors = factors.shape[1]
-    discrete_factors = np.full((n_factors,), False)
+    if type(discrete_factors) is bool:
+        discrete_factors = np.full((n_factors,), discrete_factors)
 
     captured_mis = [
         get_captured_mi_from_factor(
