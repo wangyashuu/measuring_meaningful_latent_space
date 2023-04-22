@@ -30,6 +30,7 @@ class DSprites(Dataset):
         self.latent_classes = data["latents_classes"][:, selected_latents]
         self.transform = transform or transforms.ToTensor()
         self.latents_sizes = metadata["latents_sizes"][selected_latents]
+        self.discrete_factors = [True, False, False, False]
 
     def __len__(self):
         return len(self.images)
