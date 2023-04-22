@@ -61,4 +61,5 @@ if __name__ == "__main__":
                     else vae_config.lambda_od
                 )
         config = default_config + vae_config
+        config.model_name = args.model_name
     model = train(config)

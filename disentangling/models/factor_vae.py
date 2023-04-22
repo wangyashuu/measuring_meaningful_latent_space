@@ -42,7 +42,7 @@ def compute_factor_vae_loss(
     input,
     factor_vae,
     factor_vae_discriminator,
-    tc_loss_factor,
+    d_tc_loss_factor,
     distribution="bernoulli",
     *args,
     **kwargs,
@@ -71,15 +71,13 @@ def compute_factor_vae_loss(
     # log(D(z) / 1 - D(z)) = logit_qz - logit_q̄z
     ###
     z_logits = factor_vae_discriminator(z)
-    discriminator_tc_loss = torch.mean(z_logits[:, 0] - z_logits[:, 1])
-    loss = (
-        reconstruction_loss + kld_loss + tc_loss_factor * discriminator_tc_loss
-    )
+    d_tc_loss = torch.mean(z_logits[:, 0] - z_logits[:, 1])
+    loss = reconstruction_loss + kld_loss + d_tc_loss_factor * d_tc_loss
     return dict(
         loss=loss,
         reconstruction_loss=reconstruction_loss,
         kld_loss=kld_loss,
-        discriminator_tc_loss=discriminator_tc_loss,
+        d_tc_loss=d_tc_loss,
         mutual_info_loss=mutual_info_loss,
         tc_loss=tc_loss,
         dimension_wise_kl_loss=dimension_wise_kl_loss,

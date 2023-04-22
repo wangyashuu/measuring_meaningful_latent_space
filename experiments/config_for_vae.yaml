@@ -14,7 +14,7 @@ beta_tcvae:
 
 factor_vae:
   loss_kwargs:
-    tc_loss_factor: 35
+    d_tc_loss_factor: 35
 
   auxiliary:
     model:

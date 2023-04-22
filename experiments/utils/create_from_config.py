@@ -101,8 +101,8 @@ def create_model(model_name, input_shape, net_params, latent_dim):
 def create_compute_loss(model_name, loss_kwargs):
     compute_loss = getattr(disentangling.models, f"compute_{model_name}_loss")
 
-    def compute_loss_with_kwargs(*args, **kwargs):
-        return compute_loss(*args, **kwargs, **loss_kwargs)
+    def compute_loss_with_kwargs(batch, *args, **kwargs):
+        return compute_loss(batch[0], *args, **kwargs, **loss_kwargs)
 
     return compute_loss_with_kwargs
 
