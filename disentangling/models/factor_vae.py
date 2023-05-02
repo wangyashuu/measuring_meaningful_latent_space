@@ -4,11 +4,7 @@ import torch
 from torch import nn, Tensor
 import torch.nn.functional as F
 from .vae import VAE
-from ..utils.loss import (
-    get_reconstruction_loss,
-    get_kld_loss,
-    get_kld_decomposed_losses,
-)
+from ..utils.loss import get_reconstruction_loss, get_kld_loss
 
 
 def permute_latent(z):
@@ -53,14 +49,6 @@ def compute_factor_vae_loss(
     reconstruction_loss = get_reconstruction_loss(decoded, input, distribution)
     kld_loss = get_kld_loss(mu, logvar)
 
-    (
-        mutual_info_loss,
-        tc_loss,
-        dimension_wise_kl_loss,
-    ) = get_kld_decomposed_losses(
-        z, mu, logvar, dataset_size=kwargs.pop("dataset_size")
-    )
-
     ###
     # D(z) is the prob of the input from q(z) rather than from ̄q(z)
     # logits is the logits that used to computed the probabilty.
@@ -78,9 +66,6 @@ def compute_factor_vae_loss(
         reconstruction_loss=reconstruction_loss,
         kld_loss=kld_loss,
         d_tc_loss=d_tc_loss,
-        mutual_info_loss=mutual_info_loss,
-        tc_loss=tc_loss,
-        dimension_wise_kl_loss=dimension_wise_kl_loss,
     )
 
 
@@ -92,17 +77,22 @@ class FactorVAEDiscriminator(nn.Module):
         # output[0] an the probability that its input is a sample from q(z) rather than ̄q(z).
         # output[1] an the probability that its input is a sample from ̄q(z) rather than q(z).
         ###
+        ###
+        # issuse when use batch norm in ddp and forward two times:
+        # ref (https://github.com/pytorch/pytorch/issues/66504, https://github.com/pytorch/pytorch/issues/73332, https://github.com/pytorch/pytorch/issues/26288)
+        # please set track_running_stats = false
+        ###
         self.backbone = nn.Sequential(
             nn.Linear(latent_dim, 1000),
-            nn.LeakyReLU(0.2, True),
+            nn.LeakyReLU(0.2),
             nn.Linear(1000, 1000),
-            nn.LeakyReLU(0.2, True),
+            nn.LeakyReLU(0.2),
             nn.Linear(1000, 1000),
-            nn.LeakyReLU(0.2, True),
+            nn.LeakyReLU(0.2),
             nn.Linear(1000, 1000),
-            nn.LeakyReLU(0.2, True),
+            nn.LeakyReLU(0.2),
             nn.Linear(1000, 1000),
-            nn.LeakyReLU(0.2, True),
+            nn.LeakyReLU(0.2),
             nn.Linear(1000, 2),
         )
 
@@ -120,8 +110,13 @@ def compute_factor_vae_discriminator_loss(
     z_logits = factor_vae_discriminator(z)
     z_permuted_logits = factor_vae_discriminator(z_permuted)
     # encourage z_logit to zero (z_prob[0] to be one)
+    z_probs = F.softmax(z_logits, dim=1)[:, 0]
+    z_permuted_probs = F.softmax(z_permuted_logits, dim=1)[:, 1]
     discriminator_loss = -0.5 * (
-        torch.mean(torch.log(F.softmax(z_logits)[:, 0]))
-        + torch.mean(torch.log(F.softmax(z_permuted_logits)[:, 1]))
+        torch.mean(torch.log(z_probs))
+        + torch.mean(torch.log(z_permuted_probs))
     )
-    return dict(discriminator_loss=discriminator_loss)
+    d_accuracy = ((z_probs > 0.5).sum() + (z_permuted_probs > 0.5).sum()) / (
+        2 * z_probs.shape[0]
+    )
+    return dict(discriminator_loss=discriminator_loss, d_accuracy=d_accuracy)
