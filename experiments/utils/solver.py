@@ -2,7 +2,6 @@ from pathlib import Path
 
 import torch
 from torch.utils.data import default_collate
-from torch.nn.parallel import DistributedDataParallel as DDP
 from box import Box
 from tqdm import tqdm
 import torch.distributed as dist
@@ -12,19 +11,28 @@ class Solver:
     def __init__(
         self,
         models,
-        device,
         optimizers=None,
         schedulers=[],
         logger=None,
         resume_path=None,
+        ddp_rank=-1,
     ):
-        self.models = [DDP(m.to(device), device_ids=[device]) for m in models]
+        self.models = models
         self.optimizers = optimizers
         self.schedulers = schedulers
-        self.device = device
         self.logger = logger
         if resume_path is not None:
             self.resume(resume_path)
+        self.ddp_rank = ddp_rank
+        self.device = ddp_rank
+        if self.ddp_rank < 0:
+            self.device = torch.cuda.current_device()
+            for m in self.models:
+                m.to(self.device)
+        
+
+    def _is_ddp(self):
+        return self.ddp_rank >= 0
 
     def set_state(self, **kwargs):
         default_state = dict(train_size=0, val_size=0, step=0, epoch=0)
@@ -35,12 +43,14 @@ class Solver:
         # https://github.com/pytorch/pytorch/issues/2830#issuecomment-718816292
         for m in self.models:
             m.to(self.device)
-        state_dicts, state = torch.load(state_path, map_location=self.device)
+        state_dicts, state = torch.load(state_path)
+        models = [getattr(m, "module", m) for m in self.models]
         for state_dict, m in zip(
-            state_dicts, [*self.models, *self.optimizers, *self.schedulers]
+            state_dicts,
+            models + (self.optimizers or []) + (self.schedulers or []),
         ):
             m.load_state_dict(state_dict)
-        self.set_state(state)
+        self.set_state(epoch=state)
 
     def _batch_to_device(self, batch):
         batch = (
@@ -52,18 +62,21 @@ class Solver:
 
     def save(self, output_dir=".", version="last"):
         if self.device == 0:
-            state_dicts = [
-                *[m.module.state_dict() for m in self.models],
-                *[o.state_dict() for o in self.optimizers],
-                *[s.state_dict() for s in self.schedulers],
-            ]
+            models = [getattr(m, "module", m) for m in self.models]
+            state_dicts = (
+                [m.state_dict() for m in models]
+                + [o.state_dict() for o in self.optimizers]
+                + [s.state_dict() for s in self.schedulers]
+            )
             save_path = Path(output_dir) / "checkpoints"
             save_path.mkdir(exist_ok=True)
             save_state = (state_dicts, self.state.epoch)
             torch.save(save_state, save_path / f"version={version}.ckpt")
 
-    def log(self, data, columns=None, **kwargs):
-        self.logger.log(data, columns=columns, step=self.state.step, **kwargs)
+    def log(self, data, columns=None, step=None, **kwargs):
+        self.logger.log(
+            data, columns=columns, step=step or self.state.step, **kwargs
+        )
 
     def _train_batch(self, batch, batch_idx, loss_calcs):
         step = self.state.epoch * self.state.n_train_batchs + batch_idx
@@ -76,7 +89,7 @@ class Solver:
             optimizer.zero_grad()
             losses = loss_calc(batch, *self.models, **common_params)
             loss = losses.get("loss") or next(iter(losses.values()))
-            loss.backward()
+            loss.backward(retain_graph=True)
             optimizer.step()
             self.log({f"train/{k}": losses[k] for k in losses}, on_step=True)
             model.eval()
@@ -86,6 +99,7 @@ class Solver:
         rs = [calc(batch, *self.models, **params) for calc in loss_calcs]
         return rs
 
+    @torch.no_grad()
     def val(self, val_loader, loss_calcs):
         self.set_state(val_size=len(val_loader.dataset))
         outs = []
@@ -95,21 +109,29 @@ class Solver:
             batch = self._batch_to_device(batch)
             outs.append(self._val_batch(batch, batch_idx, loss_calcs))
         losses = {k: o[k].mean() for o in default_collate(outs) for k in o}
-        for k in losses:
-            dist.all_reduce(losses[k])
-            losses[k] = losses[k] / dist.get_world_size()
+        if self._is_ddp():
+            for k in losses:
+                dist.all_reduce(losses[k])
+                losses[k] = losses[k] / dist.get_world_size()
         return losses
 
+    @torch.no_grad()
     def test(self, test_loader, test_batch):
         outs = []
         for batch_idx, batch in enumerate(test_loader):
             batch = self._batch_to_device(batch)
             outs.append(test_batch(batch, batch_idx, *self.models))
-        results = []
-        for o in default_collate(outs):
-            tmp = [torch.zeros_like(o) for i in range(dist.get_world_size())]
-            dist.all_gather(tmp, o)
-            results.append(torch.stack(tmp, 0).reshape(-1, *o.shape[2:]))
+
+        collated = default_collate(outs)
+        if self._is_ddp():
+            results = []
+            world_size = dist.get_world_size()
+            for o in collated:
+                tmp = [torch.zeros_like(o) for i in range(world_size)]
+                dist.all_gather(tmp, o)
+                results.append(torch.stack(tmp, 0).reshape(-1, *o.shape[2:]))
+        else:
+            results = [c.reshape(-1, *c.shape[2:]) for c in collated]
         return results
 
     def train(
@@ -132,7 +154,8 @@ class Solver:
         start_epoch = self.state.epoch
         for epoch in range(start_epoch, n_epochs):
             self.set_state(epoch=epoch)
-            train_loader.sampler.set_epoch(epoch)
+            if self._is_ddp():
+                train_loader.sampler.set_epoch(epoch)
             for batch_idx, batch in enumerate(
                 tqdm(
                     train_loader,
