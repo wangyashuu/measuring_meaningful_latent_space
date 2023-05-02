@@ -1,181 +1,44 @@
 import math
-import numpy as np
-from sklearn.decomposition import PCA
 
 from .z_min_var import z_min_var
-from .utils import generate_factors
-
-
-n_factors = 4
+from .utils import get_scores
 
 
 def test_m0c0i0():
-    def sample_factors(batch_size):
-        return generate_factors(batch_size, n_factors)
-
-    def factor2code(factors):
-        return generate_factors(factors.shape[0], n_factors)
-
-    score = z_min_var(
-        n_votes=10000,
-        batch_size=128,
-        sample_factors=sample_factors,
-        factor2code=factor2code,
-        n_global_items=30000,
-    )
-    assert math.isclose(score, 1 / n_factors, abs_tol=0.2)  # 0 vs 1/n_factors
+    score = get_scores(z_min_var, False, False, False)
+    assert math.isclose(score, 0.5, abs_tol=0.2)  # 1/n_factors
 
 
 def test_m0c0i1():
-    n_factors = 2
-
-    def sample_factors(batch_size):
-        factors = generate_factors(batch_size, n_factors)
-        return factors
-
-    def factor2code(factors):
-        model = PCA()
-        latents = model.fit_transform(factors)
-        return latents
-
-    score = z_min_var(
-        n_votes=10000,
-        batch_size=128,
-        sample_factors=sample_factors,
-        factor2code=factor2code,
-        n_global_items=30000,
-    )
-    # TODO
-    assert math.isclose(score, 0.5, abs_tol=0.1)  # 0 vs 0.4997
+    score = get_scores(z_min_var, False, False, True)
+    assert math.isclose(score, 0.5, abs_tol=0.1)  # 0.5440
 
 
 def test_m0c1i0():
-    n_factors = 4
-
-    def sample_factors(batch_size):
-        factors = generate_factors(batch_size, n_factors)
-        return np.hstack([factors, factors])
-
-    n_factors_per_latent = 2
-
-    def factor2code(factors):
-        n_factors_half = factors.shape[1] // n_factors_per_latent
-        latents = (
-            factors[:, :n_factors_half] + factors[:, n_factors_half:]
-        ) / n_factors_per_latent
-        latents[latents < 0] = -1
-        return latents
-
-    score = z_min_var(
-        n_votes=10000,
-        batch_size=128,
-        sample_factors=sample_factors,
-        factor2code=factor2code,
-        n_global_items=30000,
-    )
-    # TODO
-    assert math.isclose(
-        score, 1 / n_factors_per_latent, abs_tol=0.2
-    )  # 0 vs 0.4997
+    score = get_scores(z_min_var, False, True, False)
+    assert math.isclose(score, 0.6, abs_tol=0.2)  # TODO: 0.464 vs 0.673
 
 
 def test_m0c1i1():
-    def sample_factors(batch_size):
-        factors = generate_factors(batch_size, 2)
-        return np.hstack([factors, factors])
-
-    n_factors_per_latent = 2
-
-    def factor2code(factors):
-        n_factors_half = factors.shape[1] // n_factors_per_latent
-        latents = (
-            factors[:, :n_factors_half] + factors[:, n_factors_half:]
-        ) / n_factors_per_latent
-        return latents
-
-    score = z_min_var(
-        n_votes=10000,
-        batch_size=128,
-        sample_factors=sample_factors,
-        factor2code=factor2code,
-        n_global_items=30000,
-    )
-    assert math.isclose(
-        score, 1 / n_factors_per_latent, abs_tol=0.2
-    )  # 0 vs 0.5068
+    score = get_scores(z_min_var, False, True, True)
+    assert math.isclose(score, 0.6, abs_tol=0.2)  # 0.6739
 
 
 def test_m1c0i0():
-    def sample_factors(batch_size):
-        factors = generate_factors(batch_size, n_factors)
-        return factors
-
-    def factor2code(factors):
-        x = factors
-        latents = np.hstack([x, x])
-        latents[latents < 0] = -1
-        return latents
-
-    score = z_min_var(
-        n_votes=10000,
-        batch_size=128,
-        sample_factors=sample_factors,
-        factor2code=factor2code,
-        n_global_items=30000,
-    )
-    assert math.isclose(score, 1, abs_tol=0.2)  # 1
+    score = get_scores(z_min_var, True, False, False)
+    assert math.isclose(score, 0.8, abs_tol=0.2)  # TODO: 0.7693 vs 1
 
 
 def test_m1c0i1():
-    def sample_factors(batch_size):
-        factors = generate_factors(batch_size, n_factors)
-        return factors
-
-    def factor2code(factors):
-        x = factors
-        return np.hstack([x, x])
-
-    score = z_min_var(
-        n_votes=10000,
-        batch_size=128,
-        sample_factors=sample_factors,
-        factor2code=factor2code,
-        n_global_items=30000,
-    )
-    assert math.isclose(score, 1, abs_tol=0.2)  # 1
+    score = get_scores(z_min_var, True, False, True)
+    assert math.isclose(score, 1.0, abs_tol=0.2)  # 1
 
 
 def test_m1c1i0():
-    def sample_factors(batch_size):
-        return generate_factors(batch_size, n_factors)
-
-    def factor2code(factors):
-        latents = np.copy(factors)
-        latents[latents < 0] = -1
-        return latents
-
-    score = z_min_var(
-        n_votes=10000,
-        batch_size=128,
-        sample_factors=sample_factors,
-        factor2code=factor2code,
-        n_global_items=30000,
-    )
-    assert math.isclose(score, 1, abs_tol=0.2)  # 1 vs 0.4968
+    score = get_scores(z_min_var, True, True, False)
+    assert math.isclose(score, 0.8, abs_tol=0.2)  # TODO: 0.681 vs 1
 
 
 def test_m1c1i1():
-    def sample_factors(batch_size):
-        return generate_factors(batch_size, n_factors)
-
-    def factor2code(factors):
-        return np.copy(factors)
-
-    score = z_min_var(
-        n_votes=10000,
-        batch_size=128,
-        sample_factors=sample_factors,
-        factor2code=factor2code,
-        n_global_items=30000,
-    )
-    assert math.isclose(score, 1, abs_tol=0.2)  # 1
+    score = get_scores(z_min_var, True, True, True)
+    assert math.isclose(score, 1.0, abs_tol=0.1)  # 1

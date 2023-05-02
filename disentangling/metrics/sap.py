@@ -1,6 +1,7 @@
 import numpy as np
 from sklearn.model_selection import train_test_split
 from cuml import svm
+from xgboost import XGBClassifier
 
 """
 Implementation of the SAP score.
@@ -12,8 +13,21 @@ Reference Implementation: https://github.com/google-research/disentanglement_lib
 """
 
 
+def get_ad_hoc_model(model_name="XGBClassifier"):
+    if model_name == "XGBClassifier":
+        return XGBClassifier(tree_method="gpu_hist")
+    elif model_name == "LinearSVC":
+        return svm.LinearSVC(C=0.01)
+    return NotImplementedError(f"dci_ad_hoc_model model_name = {model_name}")
+
+
 def get_score_matrix(
-    codes, factors, discreted_factors=False, test_size=0.2, random_state=None
+    codes,
+    factors,
+    discreted_factors=False,
+    test_size=0.2,
+    random_state=None,
+    classifier_name="XGBClassifier",
 ):
     n_factors, n_codes = factors.shape[1], codes.shape[1]
     if type(discreted_factors) is not list:
@@ -29,7 +43,7 @@ def get_score_matrix(
             if discreted_factor:
                 x_i_test = X_test[:, i]
                 y_j_test = y_test[:, j]
-                classifier = svm.LinearSVC(C=0.01)
+                classifier = get_ad_hoc_model(model_name=classifier_name)
                 classifier.fit(
                     x_i[:, np.newaxis].astype(np.float32),
                     y_j.astype(np.float32),

@@ -1,6 +1,6 @@
 import numpy as np
 
-from ..utils.mi import get_mutual_infos, get_entropies
+from disentangling.utils.mi import get_mutual_infos, get_entropies
 
 
 def mig_sup(
@@ -26,6 +26,6 @@ def mig_sup(
     )
     # sort mi for each codes
     sorted = np.sort(mutual_infos, axis=1)[:, ::-1]
-    entropies = get_entropies(codes)
+    entropies = get_entropies(codes, discrete=False, estimator=estimator)
     score = np.mean((sorted[:, 0] - sorted[:, 1]) / (entropies + epsilon))
     return score

@@ -1,6 +1,6 @@
 import numpy as np
 
-from ..utils.mi import get_mutual_infos, get_entropies
+from disentangling.utils.mi import get_mutual_infos, get_entropies
 
 """
 Implementation of DCIMIG.

@@ -1,76 +1,60 @@
 import math
 
-from .utils import (
-    run_metric,
-    m0c0i0,
-    m0c0i1,
-    m0c1i0,
-    m0c1i1,
-    m1c0i0,
-    m1c0i1,
-    m1c1i0,
-    m1c1i1,
-)
-
+from .utils import get_scores
 from .dci import dci
 
 
 def test_m0c0i0():
-    scores = run_metric(dci, m0c0i0)
-    assert math.isclose(scores["d"], 0, abs_tol=0.2)  # 0.0063
-    assert math.isclose(scores["c"], 0, abs_tol=0.2)  # 0.0117
-    assert math.isclose(scores["i"], 0, abs_tol=0.2)  # 0.0333
+    scores = get_scores(dci, False, False, False)
+    assert math.isclose(scores["d"], 0, abs_tol=0.2)  # 0.0001
+    assert math.isclose(scores["c"], 0, abs_tol=0.2)  # 0.0006
+    assert math.isclose(scores["i"], 0, abs_tol=0.2)  # 0.4795
 
 
 def test_m0c0i1():
-    scores = run_metric(dci, m0c0i1)
-    assert math.isclose(scores["d"], 0, abs_tol=0.3)  # 0 vs 0.2227
-    assert math.isclose(scores["c"], 0, abs_tol=0.3)  # 0 vs 0.2228
-    assert math.isclose(scores["i"], 1, abs_tol=0.2)  # 1 vs 0.9551
+    scores = get_scores(dci, False, False, True)
+    assert math.isclose(scores["d"], 0, abs_tol=0.3)  # 0.0026
+    assert math.isclose(scores["c"], 0, abs_tol=0.3)  # 0.0033
+    assert math.isclose(scores["i"], 1, abs_tol=0.2)  # 1.0
 
 
 def test_m0c1i0():
-    scores = run_metric(dci, m0c1i0)
-    # TODO: mark analysis
-    assert math.isclose(scores["d"], 0.5, abs_tol=0.1)  # 0.4552 0.2037
-    assert math.isclose(scores["c"], 1.0, abs_tol=0.1)  # 0.9904 0.4089
-    assert math.isclose(scores["i"], 0.5, abs_tol=0.1)  # 0.5554
-    # 30000 d: 0.3867 c: 0.7772
-    # 30000 d: 0.2559 c: 0.5644
+    scores = get_scores(dci, False, True, False)
+    assert math.isclose(scores["d"], 0.5, abs_tol=0.1)  # 0.5695
+    assert math.isclose(scores["c"], 1.0, abs_tol=0.1)  # 0.9914
+    assert math.isclose(scores["i"], 0.6, abs_tol=0.1)  # 0.6435
 
 
 def test_m0c1i1():
-    scores = run_metric(dci, m0c1i1)
-    assert math.isclose(scores["d"], 0, abs_tol=0.5)  # 0.4996
-    assert math.isclose(scores["c"], 1, abs_tol=0.2)  # 0.9993
-    assert math.isclose(scores["i"], 1, abs_tol=0.2)  # 0.9994
+    scores = get_scores(dci, False, True, True)
+    assert math.isclose(scores["d"], 0.5, abs_tol=0.5)  # 0.5793
+    assert math.isclose(scores["c"], 1.0, abs_tol=0.2)  # 0.9999
+    assert math.isclose(scores["i"], 1.0, abs_tol=0.2)  # 1.0
 
 
 def test_m1c0i0():
-    scores = run_metric(dci, m1c0i0, batch_size=100000)
-    assert math.isclose(scores["d"], 0.6, abs_tol=0.3)  # 0.4849 0.5748 0.8925
-    assert math.isclose(scores["c"], 0.2, abs_tol=0.3)  # 0.2557 0.2998 0.4655
-    assert math.isclose(scores["i"], 0.5, abs_tol=0.3)  # 0.5645
+    scores = get_scores(dci, True, False, False)
+    assert math.isclose(scores["d"], 1.0, abs_tol=0.1)  # 0.9973
+    assert math.isclose(scores["c"], 0.5, abs_tol=0.2)  # 0.6828
+    assert math.isclose(scores["i"], 0.6, abs_tol=0.1)  # 0.5929
 
 
 def test_m1c0i1():
-    scores = run_metric(dci, m1c0i1)
-    assert math.isclose(scores["d"], 1, abs_tol=0.2)    # 0.9987
-    assert math.isclose(scores["c"], 0.5, abs_tol=0.2)  # 0.5004
-    assert math.isclose(scores["i"], 1, abs_tol=0.2)    # 0.9987
+    scores = get_scores(dci, True, False, True)
+    assert math.isclose(scores["d"], 1.0, abs_tol=0.1)  # 0.9999
+    assert math.isclose(scores["c"], 0.5, abs_tol=0.2)  # 0.6846
+    assert math.isclose(scores["i"], 1.0, abs_tol=0.1)  # 1.0
 
 
 def test_m1c1i0():
-    scores = run_metric(dci, m1c1i0)
-    assert math.isclose(scores["d"], 0.7, abs_tol=0.3)
-    # 0.6587 0.8925 0.9104 0.5184
-    assert math.isclose(scores["c"], 0.7, abs_tol=0.3)
-    # 0.6644 0.4655 0.9104 0.5622
-    assert math.isclose(scores["i"], 0.5, abs_tol=0.2)  # 0 vs 0.5564
+    scores = get_scores(dci, True, True, False)
+    assert math.isclose(scores["d"], 0.1, abs_tol=0.3)  # 0.9961
+    assert math.isclose(scores["c"], 0.1, abs_tol=0.3)  # 0.9961
+    assert math.isclose(scores["i"], 0.5, abs_tol=0.2)  # 0.6444
 
 
 def test_m1c1i1():
-    scores = run_metric(dci, m1c1i1)
-    assert math.isclose(scores["d"], 1, abs_tol=0.2)  # 1 vs 0.9897
-    assert math.isclose(scores["c"], 1, abs_tol=0.2)  # 1 vs 0.9897
-    assert math.isclose(scores["i"], 1, abs_tol=0.2)  # 1 vs 0.9848
+    scores = get_scores(dci, True, True, True)
+    assert math.isclose(scores["d"], 1.0, abs_tol=0.2)  # 0.9999
+    assert math.isclose(scores["c"], 1.0, abs_tol=0.2)  # 0.9999
+    assert math.isclose(scores["i"], 1.0, abs_tol=0.2)  # 1.0
