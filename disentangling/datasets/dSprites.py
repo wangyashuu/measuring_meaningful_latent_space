@@ -30,7 +30,7 @@ class DSprites(Dataset):
         self.latent_classes = data["latents_classes"][:, selected_latents]
         self.transform = transform or transforms.ToTensor()
         self.latents_sizes = metadata["latents_sizes"][selected_latents]
-        self.discrete_factors = [True, False, False, False]
+        self.discrete_factors = [True, False, False, False, False]
 
     def __len__(self):
         return len(self.images)
@@ -48,17 +48,14 @@ class DSprites(Dataset):
         latents_bases = np.concatenate((latents_bases, np.array([1])))
         return np.dot(latents, latents_bases).astype(int)
 
-    # def sample_latent(latent_ranges, size=1):
-    #     samples = np.zeros((size, latent_ranges.shape[0]))
-    #     for lat_i, lat_range in enumerate(latent_ranges):
-    #         low, high = lat_range
-    #         samples[:, lat_i] = np.random.randint(
-    #             low=low, high=high, size=size
-    #         )
-    #     return samples
-
-    # def get_latent_ranges(self):
-    #     return self.latents
+    def sample_factors(self, batch_size):
+        latents_sizes = self.latents_sizes
+        factors = [
+            np.random.randint(0, n_classes, size=(batch_size, 1))
+            for n_classes in latents_sizes
+        ]
+        factors = np.hstack(factors)
+        return factors
 
 
 def select_index_by_range(latents_sizes, includes, excludes):
