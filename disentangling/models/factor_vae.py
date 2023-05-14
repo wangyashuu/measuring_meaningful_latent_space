@@ -93,6 +93,8 @@ class FactorVAEDiscriminator(nn.Module):
             nn.LeakyReLU(0.2),
             nn.Linear(1000, 1000),
             nn.LeakyReLU(0.2),
+            nn.Linear(1000, 1000),
+            nn.LeakyReLU(0.2),
             nn.Linear(1000, 2),
         )
 
