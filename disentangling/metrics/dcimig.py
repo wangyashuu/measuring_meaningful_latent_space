@@ -7,6 +7,21 @@ Implementation of DCIMIG.
 Based on "How to Not Measure Disentanglement"
 """
 
+def _dcimig_from_mi(mutual_infos):
+    n_codes, n_factors = mutual_infos.shape
+    mutual_infos_normalized = np.zeros((n_codes, n_factors))
+    for c in range(n_codes):
+        sorted = np.sort(mutual_infos[c, :])  # sort by each factor c
+        max_idx = np.argmax(mutual_infos[c, :])
+        gap = sorted[-1] - sorted[-2]
+        mutual_infos_normalized[c, max_idx] = gap
+
+    gap_sum = 0
+    for f in range(n_factors):
+        gap_sum += np.max(mutual_infos_normalized[:, f])
+
+    return gap_sum
+
 
 def dcimig(factors, codes, estimator="ksg", discrete_factors=False, **kwargs):
     """
@@ -26,17 +41,7 @@ def dcimig(factors, codes, estimator="ksg", discrete_factors=False, **kwargs):
     mutual_infos = get_mutual_infos(
         codes, factors, estimator=estimator, discrete_factors=discrete_factors
     )
-
-    mutual_infos_normalized = np.zeros((n_codes, n_factors))
-    for c in range(n_codes):
-        sorted = np.sort(mutual_infos[c, :])  # sort by each factor c
-        max_idx = np.argmax(mutual_infos[c, :])
-        gap = sorted[-1] - sorted[-2]
-        mutual_infos_normalized[c, max_idx] = gap
-
-    gap_sum = 0
-    for f in range(n_factors):
-        gap_sum += np.max(mutual_infos_normalized[:, f])
+    gap_sum = _dcimig_from_mi(mutual_infos)
 
     factor_entropy = np.sum(get_entropies(factors, discrete=discrete_factors))
     dcimig_score = gap_sum / factor_entropy

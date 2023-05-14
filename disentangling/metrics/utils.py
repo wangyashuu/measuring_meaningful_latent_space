@@ -172,7 +172,8 @@ def get_scores(
     disentanglement,
     completeness,
     informativeness,
-    discreted_factors=False,
+    discrete_factors=False,
+    batch_size=50000,
 ):
     if metric.__name__ == "z_min_var":
         sample_func = lambda batch_size=10000: sample_factors(
@@ -191,5 +192,5 @@ def get_scores(
         factors, disentanglement, completeness, informativeness
     )
     codes = encode(factors)
-    scores = metric(factors, codes, discreted_factors=discreted_factors)
+    scores = metric(factors, codes, discrete_factors=discrete_factors)
     return scores
