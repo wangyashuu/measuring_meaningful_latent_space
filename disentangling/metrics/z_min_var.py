@@ -8,7 +8,11 @@ Reference Implementation: https://github.com/google-research/disentanglement_lib
 
 
 def z_min_var(
-    n_votes, batch_size, sample_factors, factor2code, n_global_items=10000
+    sample_factors,
+    factor2code,
+    n_votes=1000,
+    batch_size=256,
+    n_global_items=70000,
 ):
     global_codes = factor2code(sample_factors(n_global_items))
     global_variances = np.var(global_codes, axis=0, ddof=1)

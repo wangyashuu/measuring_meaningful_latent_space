@@ -10,6 +10,20 @@ import torch.nn as nn
 conv_params = dict(kernel_size=4, stride=2, padding=1)
 
 
+def get_layer_modules(layer, batch_norm=False, activation=True):
+    modules = [layer]
+    if batch_norm:
+        normed = (
+            nn.BatchNorm1d(layer.out_features)
+            if isinstance(layer, nn.Linear)
+            else nn.BatchNorm2d(layer.out_channels)
+        )
+        modules.append(normed)
+    if activation:
+        modules.append(nn.ReLU())
+    return modules
+
+
 def get_fc_encoder(input_shape, hiddens, batch_norms=False, activations=True):
     if type(batch_norms) is not list:
         batch_norms = [batch_norms] * len(hiddens)
@@ -17,22 +31,21 @@ def get_fc_encoder(input_shape, hiddens, batch_norms=False, activations=True):
         activations = [activations] * len(hiddens)
     layers = [nn.Flatten(start_dim=1)]
     n_in = torch.prod(torch.tensor(input_shape))
-    for h, batch_norm, activation in zip(hiddens, batch_norms, activations):
-        layer = nn.Linear(n_in, h)
-        if batch_norm or activation:
-            modules = [layer]
-            if batch_norm:
-                modules.append(nn.BatchNorm1d(h))
-            if activation:
-                modules.append(nn.ReLU())
-            layer = nn.Sequential(*modules)
-        layers.append(layer)
-        n_in = h
+    for n_out, batch_norm, activation in zip(
+        hiddens, batch_norms, activations
+    ):
+        layer = nn.Linear(n_in, n_out)
+        layers.extend(get_layer_modules(layer, batch_norm, activation))
+        n_in = n_out
     return nn.Sequential(*layers)
 
 
 def get_fc_decoder(
-    hiddens, output_shape, batch_norms=False, activations=True, is_output=True
+    hiddens,
+    output_shape,
+    batch_norms=False,
+    activations=True,
+    is_output=True,
 ):
     if type(batch_norms) is not list:
         batch_norms = [batch_norms] * len(hiddens)
@@ -42,17 +55,10 @@ def get_fc_decoder(
     n_in = hiddens[0]
     unflatten_input_dims = torch.prod(torch.tensor(output_shape))
     n_outs = hiddens[1:] if is_output else hiddens[1:] + [unflatten_input_dims]
-    for h, batch_norm, activation in zip(n_outs, batch_norms, activations):
-        layer = nn.Linear(n_in, h)
-        if batch_norm or activation:
-            modules = [layer]
-            if batch_norm:
-                modules.append(nn.BatchNorm1d(h))
-            if activation:
-                modules.append(nn.ReLU())
-            layer = nn.Sequential(*modules)
-        layers.append(layer)
-        n_in = h
+    for n_out, batch_norm, activation in zip(n_outs, batch_norms, activations):
+        layer = nn.Linear(n_in, n_out)
+        layers.extend(get_layer_modules(layer, batch_norm, activation))
+        n_in = n_out
 
     if is_output:
         layers.append(nn.Linear(n_in, unflatten_input_dims))
@@ -103,14 +109,7 @@ def get_cnn_encoder(
         hiddens, batch_norms, activations
     ):
         layer = nn.Conv2d(n_in, n_out, **conv_params)
-        if batch_norm or activation:
-            modules = [layer]
-            if batch_norm:
-                modules.append(nn.BatchNorm2d(n_out))
-            if activation:
-                modules.append(nn.ReLU())
-            layer = nn.Sequential(*modules)
-        layers.append(layer)
+        layers.extend(get_layer_modules(layer, batch_norm, activation))
         n_in = n_out
         in_size, output_padding = conv2d_output_size(in_size, **conv_params)
         output_paddings.append(output_padding)
@@ -139,14 +138,7 @@ def get_cnn_decoder(
         layer = nn.ConvTranspose2d(
             n_in, n_out, output_padding=output_padding, **conv_params
         )
-        if batch_norm or activation:
-            modules = [layer]
-            if batch_norm:
-                modules.append(nn.BatchNorm2d(n_out))
-            if activation:
-                modules.append(nn.ReLU())
-            layer = nn.Sequential(*modules)
-        layers.append(layer)
+        layers.extend(get_layer_modules(layer, batch_norm, activation))
         n_in = n_out
     n_out = output_shape[0]
     layers.append(

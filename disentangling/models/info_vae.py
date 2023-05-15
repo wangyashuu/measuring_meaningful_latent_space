@@ -6,6 +6,8 @@ from torch import nn
 from .vae import VAE
 from ..utils.loss import get_reconstruction_loss, get_kld_loss
 
+## https://github.com/ShengjiaZhao/MMD-Variational-Autoencoder/blob/master/mmd_vae.ipynb
+
 
 def imq_kernel(z1, z2, sigma, scales=[1.0]):
     """
@@ -38,6 +40,16 @@ def rbf_kernel(z1, z2, sigma):
     return k
 
 
+def init_weights(m):
+    if (
+        isinstance(m, nn.Linear)
+        or isinstance(m, nn.ConvTranspose2d)
+        or isinstance(m, nn.Conv2d)
+    ):
+        torch.nn.init.xavier_uniform_(m.weight)
+        m.bias.data.fill_(0.01)
+
+
 class InfoVAE(VAE):
     def __init__(
         self,
@@ -54,6 +66,7 @@ class InfoVAE(VAE):
             decoder_input_shape,
             latent_dim,
         )
+        self.apply(init_weights)
 
 
 def compute_info_vae_loss(
@@ -90,11 +103,13 @@ def compute_info_vae_loss(
         + z_prior_kernel.mean()
         - 2 * cross_kernel.mean()
     )
+    n_dims = torch.prod(torch.tensor(input.shape[1:]))
     loss = (
-        reconstruction_loss
-        + (1 - alpha) * kld_loss
+        (reconstruction_loss / n_dims)
+        + (1 - alpha) * (kld_loss / n_dims)
         + (alpha + lambd - 1) * mmd_loss
     )
+
     return dict(
         loss=loss,
         reconstruction_loss=reconstruction_loss,

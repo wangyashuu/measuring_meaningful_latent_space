@@ -40,6 +40,7 @@ class VAE(AE):
             nn.Linear(
                 latent_dim, torch.prod(torch.tensor(decoder_input_shape))
             ),
+            nn.ReLU(),
             nn.Unflatten(1, decoder_input_shape),
         )
         self.latent_dim = latent_dim

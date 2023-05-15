@@ -1,5 +1,6 @@
 import numpy as np
-from ..utils.mi import get_mutual_infos
+
+from disentangling.utils.mi import get_mutual_infos
 
 
 """

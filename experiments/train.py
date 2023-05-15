@@ -5,7 +5,8 @@ import torch
 from torch.utils.data import DataLoader
 from .utils.solver import Solver
 from .utils.logger import WandbLogger
-from .utils.ddp import ddp_dataloader, ddp_run
+from .utils.ddp import ddp_dataloader, ddp_model, ddp_run
+from .utils.seed_everything import seed_everything
 from .test import samples, reconstructs, run_metrics, test_batch
 
 from .utils.create_from_config import (
@@ -19,6 +20,18 @@ from .utils.create_from_config import (
 )
 
 
+def init_loss(model, config):
+    loss_calc = create_compute_loss(
+        config.model_name, config.get("loss_kwargs", {})
+    )
+    optimizer = create_optimizer(model, config.optimizer)
+    scheduler = None
+    if "scheduler" in config:
+        scheduler = create_scheduler(optimizer, config.scheduler)
+
+    return loss_calc, optimizer, scheduler
+
+
 def init_main(config):
     main_model = create_model(
         model_name=config.model_name,
@@ -26,6 +39,7 @@ def init_main(config):
         net_params=config.net_params,
         latent_dim=config.latent_dim,
     )
+
     loss_calc = create_compute_loss(
         config.model_name, config.get("loss_kwargs", {})
     )
@@ -59,13 +73,10 @@ def init(config):
 
 
 def run_train(rank, config):
-    torch.backends.cudnn.enabled = True
-    torch.backends.cudnn.benchmark = True
-    device = rank
-
-    name = urllib.parse.urlencode(config.loss_kwargs)
+    seed_everything(config.seed)
+    name = urllib.parse.urlencode(config.loss_kwargs) or "empty"
     output_dir = (
-        Path(config.output_dir) / config.model_name / str(config.seed) / name
+        Path(config.output_dir) / str(config.seed) / config.model_name / name
     )
     output_dir.mkdir(parents=True, exist_ok=True)
     models, optimizers, schedulers, loss_calcs = init(config)
@@ -74,9 +85,11 @@ def run_train(rank, config):
         train_set, **config.dataloader.train, pin_memory=True
     )
     val_loader = DataLoader(val_set, **config.dataloader.val, pin_memory=True)
-    train_loader = ddp_dataloader(train_loader)
-    val_loader = ddp_dataloader(val_loader)
     discrete_factors = val_set.dataset.discrete_factors
+    if rank >= 0:
+        train_loader = ddp_dataloader(train_loader)
+        val_loader = ddp_dataloader(val_loader)
+        models = [ddp_model(m, rank) for m in models]
 
     metric_funcs = create_metrics(config.metrics)
 
@@ -90,6 +103,8 @@ def run_train(rank, config):
             discrete_factors=discrete_factors,
         )
         vae = trainer.models[0]
+        if trainer._is_ddp():
+            vae = vae.module
         images = {
             **samples(vae, device=trainer.device),
             **reconstructs(vae, val_loader.dataset, device=trainer.device),
@@ -98,7 +113,9 @@ def run_train(rank, config):
         return {**images, **metrics}
 
     logger = WandbLogger(
-        device=0,
+        is_on_master=rank < 1, n_steps_log_every=config.n_steps_log_every
+    )
+    logger.start(
         project="innvariant-representations",
         group=config.model_name,
         name=name,
@@ -109,8 +126,8 @@ def run_train(rank, config):
         models,
         optimizers=optimizers,
         schedulers=schedulers,
-        device=device,
         logger=logger,
+        ddp_rank=rank,
     )
     trainer.train(
         n_epochs=config.n_epochs,
@@ -126,5 +143,8 @@ def run_train(rank, config):
     )
 
 
-def train(config):
-    ddp_run(run_train, config)
+def train(ddp, config):
+    if ddp:
+        ddp_run(run_train, config)
+    else:
+        run_train(-1, config)

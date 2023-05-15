@@ -1,18 +1,29 @@
 import os
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, RandomSampler
 from torch.utils.data.distributed import DistributedSampler
+from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.multiprocessing as mp
 from torch.distributed import init_process_group, destroy_process_group
 
 
 def ddp_dataloader(loader):
     params = dict(pin_memory=True, shuffle=False, drop_last=True)
-    # shuffle = dataloader.sampler.__class__ == RandomSampler
-    sampler = DistributedSampler(loader.dataset, shuffle=True, drop_last=True)
-    return DataLoader(
-        loader.dataset, batch_size=loader.batch_size, sampler=sampler, **params
+    shuffle = loader.sampler.__class__ == RandomSampler
+    sampler = DistributedSampler(
+        loader.dataset, shuffle=shuffle, drop_last=True
     )
+    return DataLoader(
+        loader.dataset,
+        batch_size=loader.batch_size,
+        num_workers=loader.num_workers,
+        sampler=sampler,
+        **params
+    )
+
+
+def ddp_model(model, device):
+    return DDP(model.to(device), device_ids=[device])
 
 
 def ddp_setup(rank: int, world_size: int):

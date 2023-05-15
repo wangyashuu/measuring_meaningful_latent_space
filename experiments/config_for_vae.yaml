@@ -1,11 +1,13 @@
 beta_vae:
+  seed: 5
   loss_kwargs:
-    beta: 2 # 2, 4, 6, 8, 16
+    beta: 2 # 2, 4, 6, 8, 10
     # beta: 100
     # n_c_steps: 100000
     # c_max: 20
 
 beta_tcvae:
+  seed: 5
   loss_kwargs:
     mutual_info_loss_factor: 1.0
     tc_loss_factor: 2.0
@@ -13,8 +15,9 @@ beta_tcvae:
     minibatch_stratified_sampling: true # false
 
 factor_vae:
+  seed: 5
   loss_kwargs:
-    d_tc_loss_factor: 35
+    d_tc_loss_factor: 10 # 20 40 60 80
 
   auxiliary:
     model:
@@ -25,14 +28,22 @@ factor_vae:
       betas: [0.5, 0.9]
 
 info_vae:
+  seed: 5
   loss_kwargs:
     alpha: 0
-    lambd: 8600 # 28*28*50
+    lambd: 30 # 2, 5, 10, 15, 20 28*28*50 10, 20, 30, 40, 50
+  # scheduler:
+  #   # name: "CosineAnnealingWarmRestarts"
+  #   # T_0: 8
+  #   name: "CosineAnnealingLR"
+  #   T_max: 16
+  #   eta_min: 0.00005
 
 dip_vae:
+  seed: 5
   loss_kwargs:
     dip_type: "i"
-    lambda_od: 10
+    lambda_od: 10 # 2, 5, 10, 20, 50
     lambda_d: 100
     # dip_type: "ii"
     # lambda_od: 5

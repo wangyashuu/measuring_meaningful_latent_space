@@ -4,11 +4,7 @@ import torch
 from torch import nn
 
 from .vae import VAE
-from ..utils.loss import (
-    get_reconstruction_loss,
-    get_kld_loss,
-    get_kld_decomposed_losses,
-)
+from ..utils.loss import get_reconstruction_loss, get_kld_loss
 
 
 class DIPVAE(VAE):
@@ -36,6 +32,7 @@ def compute_dip_vae_loss(
     lambda_od,
     lambda_d,
     distribution="bernoulli",
+    beta=1,
     *args,
     **kwargs,
 ) -> dict:
@@ -73,15 +70,8 @@ def compute_dip_vae_loss(
     dip_off_diag_loss = torch.sum(off_diag**2)
     dip_diag_loss = torch.sum((diag - 1) ** 2)
     dip_loss = lambda_od * dip_off_diag_loss + lambda_d * dip_diag_loss
-    loss = reconstruction_loss + kld_loss + dip_loss
 
-    (
-        mutual_info_loss,
-        tc_loss,
-        dimension_wise_kl_loss,
-    ) = get_kld_decomposed_losses(
-        z, mu, logvar, dataset_size=kwargs.pop("dataset_size")
-    )
+    loss = reconstruction_loss + beta * kld_loss + dip_loss
 
     return dict(
         loss=loss,
@@ -90,7 +80,4 @@ def compute_dip_vae_loss(
         dip_off_diag_loss=dip_off_diag_loss,
         dip_diag_loss=dip_diag_loss,
         dip_loss=dip_loss,
-        mutual_info_loss=mutual_info_loss,
-        tc_loss=tc_loss,
-        dimension_wise_kl_loss=dimension_wise_kl_loss,
     )

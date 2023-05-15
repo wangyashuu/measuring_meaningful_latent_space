@@ -1,6 +1,6 @@
 import numpy as np
 from sklearn.model_selection import train_test_split
-from cuml import svm
+from xgboost import XGBClassifier
 
 """
 Implementation of the SAP score.
@@ -12,24 +12,35 @@ Reference Implementation: https://github.com/google-research/disentanglement_lib
 """
 
 
+def get_ad_hoc_model(model_name="XGBClassifier"):
+    if model_name == "XGBClassifier":
+        return XGBClassifier(tree_method="gpu_hist")
+    raise NotImplementedError(f"dci_ad_hoc_model model_name = {model_name}")
+
+
 def get_score_matrix(
-    codes, factors, discreted_factors=False, test_size=0.2, random_state=None
+    codes,
+    factors,
+    discrete_factors=False,
+    test_size=0.2,
+    random_state=None,
+    classifier_name="XGBClassifier",
 ):
     n_factors, n_codes = factors.shape[1], codes.shape[1]
-    if type(discreted_factors) is not list:
-        discreted_factors = [discreted_factors] * n_factors
+    if type(discrete_factors) is not list:
+        discrete_factors = [discrete_factors] * n_factors
     X_train, X_test, y_train, y_test = train_test_split(
         codes, factors, test_size=test_size, random_state=random_state
     )
     score_matrix = np.zeros([n_codes, n_factors])
     for i in range(n_codes):
-        for j, discreted_factor in enumerate(discreted_factors):
+        for j, discrete_factor in enumerate(discrete_factors):
             x_i = X_train[:, i]
             y_j = y_train[:, j]
-            if discreted_factor:
+            if discrete_factor:
                 x_i_test = X_test[:, i]
                 y_j_test = y_test[:, j]
-                classifier = svm.LinearSVC(C=0.01)
+                classifier = get_ad_hoc_model(model_name=classifier_name)
                 classifier.fit(
                     x_i[:, np.newaxis].astype(np.float32),
                     y_j.astype(np.float32),
@@ -51,12 +62,12 @@ def get_score_matrix(
 
 
 def sap(
-    factors, codes, discreted_factors=False, test_size=0.2, random_state=None
+    factors, codes, discrete_factors=False, test_size=0.2, random_state=None
 ):
     matrix = get_score_matrix(
         codes,
         factors,
-        discreted_factors=discreted_factors,
+        discrete_factors=discrete_factors,
         test_size=test_size,
         random_state=random_state,
     )
