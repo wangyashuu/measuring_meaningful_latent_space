@@ -4,6 +4,7 @@ from scipy.special import digamma, gamma
 from sklearn.neighbors import NearestNeighbors, KDTree
 from sklearn.metrics import mutual_info_score
 from sklearn.preprocessing import scale
+from .mi_estimator import estimate_mutual_information
 
 """
 adapted from https://github.com/scikit-learn/scikit-learn/blob/82df48934eba1df9a1ed3be98aaace8eada59e6e/sklearn/feature_selection/_mutual_info.py#
@@ -26,7 +27,7 @@ def atleast_2d(arr):
     return arr
 
 
-def add_random_noise(X, epsilon=1e-12):
+def add_random_noise(X, epsilon=1e-10):
     # Add small noise to continuous features as advised in Kraskov et. al.
     return X + epsilon * np.random.rand(*X.shape)
 
@@ -120,6 +121,10 @@ def mutual_info_cd(X, y, n_neighbors=3):
     return max(0, mi)
 
 
+def is_1d(x):
+    return len(x.shape) <= 1 or (len(x.shape) == 2 and x.shape[1] == 1)
+
+
 def default_transform(X):
     return scale(X, with_mean=False)
 
@@ -130,9 +135,13 @@ def get_mutual_info_by_ksg(
     discrete_x=False,
     discrete_y=False,
     n_neighbors=3,
+    epsilon=1e-10,
     distance_metric="chebyshev",
     transform=default_transform,
 ):
+    if discrete_x and discrete_y and is_1d(X) and is_1d(y):
+        return mutual_info_score(X.reshape(-1), y.reshape(-1))
+
     X = atleast_2d(X)
     y = atleast_2d(y)
 
@@ -141,12 +150,12 @@ def get_mutual_info_by_ksg(
         X = transform(X)
         y = transform(y)
 
-    X = add_random_noise(X)
+    X = add_random_noise(X, epsilon=epsilon)
 
     if discrete_y:
         return mutual_info_cd(X, y, n_neighbors=n_neighbors)
     else:
-        y = add_random_noise(y)
+        y = add_random_noise(y, epsilon=epsilon)
         return mutual_info_cc(
             X, y, n_neighbors=n_neighbors, distance_metric=distance_metric
         )
@@ -221,18 +230,41 @@ def get_entropies(clouds, *args, discrete=True, **kwargs):
     return np.array(entropies)
 
 
-def get_entropy(cloud, *args, discrete=True, **kwargs):
+def get_entropy(cloud, *args, discrete=False, **kwargs):
     # return get_entropy_by_ksg(cloud, *args, **kwargs)
     return get_mutual_info(
         cloud, cloud, discrete_x=discrete, discrete_y=discrete, *args, **kwargs
     )
 
 
-def get_mutual_info(x, y, *args, estimator="bins", **kwargs):
+def cache_fn(fn):
+    cache = dict()
+
+    def cached_fn(x, y, *args, **kwargs):
+        use_cache = kwargs.pop("use_cache", True)
+        key_args = dict(x=x[-32:], y=y[-32:], args=args, kwargs=kwargs)
+        key = hash(str(key_args))
+        if (not use_cache) or (key not in cache):
+            r = fn(x, y, *args, **kwargs)
+            cache[key] = r
+        return cache[key]
+
+    cached_fn.cache = cache
+    return cached_fn
+
+
+def _get_mutual_info(x, y, *args, estimator="bins", **kwargs):
     if estimator == "bins":
         return get_mutual_info_by_bins(x, y, *args, **kwargs)
     elif estimator == "ksg":
         return get_mutual_info_by_ksg(x, y, *args, **kwargs)
+    elif estimator == "mine":
+        return estimate_mutual_information(x, y, *args, **kwargs)
+    else:
+        raise NotImplementedError(f"get_mutual_info estimator = {estimator}")
+
+
+get_mutual_info = cache_fn(_get_mutual_info)
 
 
 def get_mutual_infos(
@@ -243,7 +275,7 @@ def get_mutual_infos(
     discrete_factors=True,
     normalized=False,
     *args,
-    **kwargs
+    **kwargs,
 ):
     n_codes = codes.shape[1]
     n_factors = factors.shape[1]
@@ -263,7 +295,7 @@ def get_mutual_infos(
                 discrete_y=discrete_y,
                 estimator=estimator,
                 *args,
-                **kwargs
+                **kwargs,
             )
     if normalized:
         code_entropies = get_entropies(
@@ -278,60 +310,3 @@ def get_mutual_infos(
         m = m / normalize_value
         m[m > 1] = 1.0  # minor estimator error, might induced by random noise
     return m
-
-
-def get_captured_mi_from_factor(
-    codes, factor, discrete_factor=True, estimator="naive", *args, **kwargs
-):
-    # I(C; z)
-    if estimator == "naive":
-        factor = factor.reshape(-1, 1)
-        h_codes = get_mutual_info(
-            codes, codes, discrete_y=discrete_factor, estimator="ksg"
-        )
-        h_factor = get_mutual_info(
-            factor, factor, discrete_y=discrete_factor, estimator="ksg"
-        )
-        xy = np.c_[codes, factor]
-        h_xy = get_mutual_info(
-            xy, xy, discrete_y=discrete_factor, estimator="ksg"
-        )
-        return max(h_codes + h_factor - h_xy, 0)
-    elif estimator == "ksg":
-        return get_mutual_info(
-            codes,
-            factor,
-            discrete_y=discrete_factor,
-            estimator="ksg",
-            *args,
-            **kwargs
-        )
-    elif estimator == "max":
-        mi_max = np.array(
-            [
-                get_mutual_info_by_ksg(
-                    codes[:, i], factor, discrete_y=discrete_factor
-                )
-                for i in range(codes.shape[1])
-            ]
-        ).max()
-        return mi_max
-
-
-def get_captured_mis(codes, factors, discrete_factors=False, *args, **kwargs):
-    n_codes = codes.shape[1]
-    n_factors = factors.shape[1]
-    if type(discrete_factors) is bool:
-        discrete_factors = np.full((n_factors,), discrete_factors)
-
-    captured_mis = [
-        get_captured_mi_from_factor(
-            codes,
-            factors[:, j],
-            discrete_factor=discrete_factors[j],
-            *args,
-            **kwargs
-        )
-        for j in range(n_factors)
-    ]
-    return np.array(captured_mis)
