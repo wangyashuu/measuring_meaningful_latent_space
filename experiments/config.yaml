@@ -2,8 +2,7 @@ seed: 1
 output_dir: output
 latent_dim: 10
 n_epochs: 128
-metrics: []
-# metrics: ["monotonicity", "mig", "mig_sup", "dcimig", "sap", ]
+metrics: ["z_min_var", "sap",  "mig", "mig_sup", "dci", "dcimig", "modularity", "dcii"]
 
 n_steps_log_every: 1600
 n_epochs_test_every: 0
@@ -39,16 +38,16 @@ dataloader:
 
 optimizer:
   name: "Adam"
-  lr: 0.0005
+  lr: 0.0001
 
 # optimizer:
 #   name: "AdamW"
 #   lr: 0.0001
 #   weight_decay: 0
 
-scheduler:
-  name: "ExponentialLR"
-  gamma: 0.95
+# scheduler:
+#   name: "ExponentialLR"
+#   gamma: 0.95
 
 # scheduler:
 #   name: "CosineAnnealingLR"
