@@ -7,6 +7,10 @@ from tqdm import tqdm
 import torch.distributed as dist
 
 
+def is_time_to_do(n, n_do_every):
+    return n_do_every > 0 and ((n + 1) % n_do_every == 0)
+
+
 class Solver:
     def __init__(
         self,
@@ -89,8 +93,8 @@ class Solver:
             optimizer.zero_grad()
             losses = loss_calc(batch, *self.models, **common_params)
             loss = losses.get("loss") or next(iter(losses.values()))
-            loss.backward(retain_graph=True)
-            optimizer.step()
+            loss.backward() # get grad
+            optimizer.step() # params += grad
             self.log({f"train/{k}": losses[k] for k in losses}, on_step=True)
             model.eval()
 
@@ -165,25 +169,19 @@ class Solver:
             ):
                 batch = self._batch_to_device(batch)
                 self._train_batch(batch, batch_idx, loss_calcs)
-            for scheduler in self.schedulers:
-                scheduler.step()
             with torch.no_grad():
                 if val_loader is not None:
                     losses = self.val(val_loader, loss_calcs)
                     self.log({f"val/{k}": losses[k] for k in losses})
                 if (
                     test_loader is not None
-                    and n_epochs_test_every > 0
-                    and (epoch + 1) % n_epochs_test_every == 0
+                    and is_time_to_do(epoch, n_epochs_test_every)
                 ):
                     test_rs = self.test(test_loader, test_batch)
                     if on_test_end is not None:
                         self.log(on_test_end(test_rs, self))
 
-            if (
-                n_epochs_save_every > 0
-                and (epoch + 1) % n_epochs_save_every == 0
-            ):
+            if is_time_to_do(epoch, n_epochs_save_every):
                 self.save(output_dir=output_dir, version=epoch)
             lrs = {
                 f"learning_rate_{i}": s.get_last_lr()[0]

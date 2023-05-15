@@ -6,6 +6,7 @@ from torch.utils.data import DataLoader
 from .utils.solver import Solver
 from .utils.logger import WandbLogger
 from .utils.ddp import ddp_dataloader, ddp_model, ddp_run
+from .utils.seed_everything import seed_everything
 from .test import samples, reconstructs, run_metrics, test_batch
 
 from .utils.create_from_config import (
@@ -17,19 +18,6 @@ from .utils.create_from_config import (
     create_scheduler,
     create_metrics,
 )
-
-
-def seed_everything(seed: int):
-    import random, os
-    import numpy as np
-    import torch
-
-    random.seed(seed)
-    os.environ["PYTHONHASHSEED"] = str(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.backends.cudnn.deterministic = True
 
 
 def init_loss(model, config):
@@ -85,12 +73,10 @@ def init(config):
 
 
 def run_train(rank, config):
-    torch.backends.cudnn.enabled = True
-    torch.backends.cudnn.benchmark = True
     seed_everything(config.seed)
     name = urllib.parse.urlencode(config.loss_kwargs) or "empty"
     output_dir = (
-        Path(config.output_dir) / config.model_name / str(config.seed) / name
+        Path(config.output_dir) / str(config.seed) / config.model_name / name
     )
     output_dir.mkdir(parents=True, exist_ok=True)
     models, optimizers, schedulers, loss_calcs = init(config)

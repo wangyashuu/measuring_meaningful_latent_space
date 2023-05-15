@@ -20,13 +20,7 @@ def get_layer_modules(layer, batch_norm=False, activation=True):
         )
         modules.append(normed)
     if activation:
-        # if activation == "ReLU":
-        #     activated = nn.ReLU()
-        # else:
-        #     activated = nn.LeakyReLU()
         modules.append(nn.ReLU())
-    if len(modules) > 1:
-        modules = [nn.Sequential(*modules)]
     return modules
 
 
@@ -47,7 +41,11 @@ def get_fc_encoder(input_shape, hiddens, batch_norms=False, activations=True):
 
 
 def get_fc_decoder(
-    hiddens, output_shape, batch_norms=False, activations=True, is_output=True
+    hiddens,
+    output_shape,
+    batch_norms=False,
+    activations=True,
+    is_output=True,
 ):
     if type(batch_norms) is not list:
         batch_norms = [batch_norms] * len(hiddens)
