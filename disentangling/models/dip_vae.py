@@ -32,6 +32,7 @@ def compute_dip_vae_loss(
     lambda_od,
     lambda_d,
     distribution="bernoulli",
+    pixel_level=False,
     beta=1,
     *args,
     **kwargs,
@@ -70,8 +71,11 @@ def compute_dip_vae_loss(
     dip_off_diag_loss = torch.sum(off_diag**2)
     dip_diag_loss = torch.sum((diag - 1) ** 2)
     dip_loss = lambda_od * dip_off_diag_loss + lambda_d * dip_diag_loss
-
-    loss = reconstruction_loss + beta * kld_loss + dip_loss
+    if pixel_level:
+        n_dims = torch.prod(torch.tensor(input.shape[1:]))
+        loss = (reconstruction_loss + beta * kld_loss) / n_dims + dip_loss
+    else:
+        loss = reconstruction_loss + beta * kld_loss + dip_loss
 
     return dict(
         loss=loss,
