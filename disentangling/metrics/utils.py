@@ -1,6 +1,5 @@
 import numpy as np
-from sklearn.decomposition import PCA
-
+import itertools
 
 """
 representation_functions
@@ -9,15 +8,6 @@ c1: a factor is captured by no more than one code
 """
 
 n_classes = 9
-import itertools
-
-# 00 -> 0
-# 01, 10 -> 1, 2
-# 02, 11, 20 -> 3, 4, 5
-# 03, 12, 21, 30 -> 6, 7, 8, 9
-# 04, 13, 22, 31, 40 -> 10, 11, 12, 13, 14
-# 1+2+ ... (i+j)  i+j
-
 
 def generate_code_classes(n_classes_per_code, shuffle=False):
     n_codes = len(n_classes_per_code)
@@ -39,25 +29,24 @@ def get_class_index_of(factors, classes):
     return indices
 
 
-def information_pipeline(factors, informativeness=0.6):
-    passed_factors = np.copy(factors)
-    for i in range(factors.shape[1]):
-        classes = np.unique(factors[:, i])
-        n_droped_classes = int(informativeness * len(classes))
-        passed = factors[:, i] > n_droped_classes
-        passed_factors[:, i] = passed * factors[:, i]
-    return passed_factors
-    # p = np.random.uniform(0, 1, size=factors.shape)
-    # passed_factors = (p < informativeness) * factors
-    # return passed_factors
-
-    # noised_factors = np.copy(factors)
-    # for i in range(factors.shape[1]):
-    #     noised = p[:, i] > informativeness
-    #     noised_factors[:, i][noised] = np.random.randint(
-    #         0, n_classes, size=(noised.sum(),)
-    #     )
-    # return noised_factors
+def information_pipeline(factors, informativeness=0.6, noised=False):
+    if noised:
+        p = np.random.uniform(0, 1, size=factors.shape)
+        noised_factors = np.copy(factors)
+        for i in range(factors.shape[1]):
+            noised = p[:, i] > informativeness
+            noised_factors[:, i][noised] = np.random.randint(
+                0, n_classes, size=(noised.sum(),)
+            )
+        return noised_factors
+    else:
+        passed_factors = np.copy(factors)
+        for i in range(factors.shape[1]):
+            classes = np.unique(factors[:, i])
+            n_droped_classes = int(informativeness * len(classes))
+            passed = factors[:, i] > n_droped_classes
+            passed_factors[:, i] = passed * factors[:, i]
+        return passed_factors
 
 
 def m0c0i1(factors):  # n_factors = 2, n_codes = 2
