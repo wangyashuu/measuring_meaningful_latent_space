@@ -242,7 +242,7 @@ def cache_fn(fn):
 
     def cached_fn(x, y, *args, **kwargs):
         use_cache = kwargs.pop("use_cache", True)
-        key_args = dict(x=x[-32:], y=y[-32:], args=args, kwargs=kwargs)
+        key_args = dict(x=x[-64:], y=y[-64:], args=args, kwargs=kwargs)
         key = hash(str(key_args))
         if (not use_cache) or (key not in cache):
             r = fn(x, y, *args, **kwargs)

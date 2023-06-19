@@ -18,6 +18,19 @@ def get_ad_hoc_model(model_name="XGBClassifier"):
     raise NotImplementedError(f"dci_ad_hoc_model model_name = {model_name}")
 
 
+def label_transformer(train_data):
+    classes = np.unique(train_data)
+
+    def transform(new_data):
+        nonlocal classes
+        new_classes = np.array(list(set(np.unique(new_data)) - set(classes)))
+        classes = np.hstack([classes, new_classes])
+        indices = (new_data == classes.reshape(-1, 1)).argmax(axis=0)
+        return indices
+
+    return transform
+
+
 def get_score_matrix(
     codes,
     factors,
@@ -33,28 +46,32 @@ def get_score_matrix(
         codes, factors, test_size=test_size, random_state=random_state
     )
     score_matrix = np.zeros([n_codes, n_factors])
-    for i in range(n_codes):
-        for j, discrete_factor in enumerate(discrete_factors):
+    for j, discrete_factor in enumerate(discrete_factors):
+        y_j = y_train[:, j]
+        if discrete_factor:
+            y_j_test = y_test[:, j]
+            transform = label_transformer(y_j)
+            y_j_encoded = transform(y_j)[:, np.newaxis]
+            y_j_test_encoded = transform(y_j_test)[:, np.newaxis]
+
+        for i in range(n_codes):
             x_i = X_train[:, i]
-            y_j = y_train[:, j]
             if discrete_factor:
                 x_i_test = X_test[:, i]
-                y_j_test = y_test[:, j]
                 classifier = get_ad_hoc_model(model_name=classifier_name)
                 classifier.fit(
-                    x_i[:, np.newaxis].astype(np.float32),
-                    y_j.astype(np.float32),
+                    x_i[:, np.newaxis].astype(np.float32), y_j_encoded
                 )
                 pred = classifier.predict(
                     x_i_test[:, np.newaxis].astype(np.float32)
                 )
-                score_matrix[i, j] = np.mean(pred == y_j_test)
+                score_matrix[i, j] = np.mean(pred == y_j_test_encoded)
             else:
                 cov_x_i_y_j = np.cov(x_i, y_j, ddof=1)
                 var_x_i_y_j = cov_x_i_y_j[0, 1] ** 2
                 var_x = cov_x_i_y_j[0, 0]
                 var_y = cov_x_i_y_j[1, 1]
-                if var_x > 1e-12:
+                if var_x > 1e-10:
                     score_matrix[i, j] = var_x_i_y_j * 1.0 / (var_x * var_y)
                 else:
                     score_matrix[i, j] = 0.0

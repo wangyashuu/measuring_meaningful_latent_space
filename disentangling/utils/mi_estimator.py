@@ -27,13 +27,6 @@ def hardly_decrease(history, patience=3, min_delta=0):
     history = np.array(history)
     if len(history) > patience:
         wait_idx = np.argmax((history - np.min(history)) <= min_delta)
-        if len(history) - wait_idx > patience:
-            print(
-                "wait, ",
-                wait_idx,
-                history,
-                (history - np.min(history)) <= min_delta,
-            )
         return len(history) - wait_idx > patience
     return False
 
@@ -72,9 +65,6 @@ class Net(nn.Module):
     def __init__(self, input_shape=2):
         super(Net, self).__init__()
         n_hidden_dims = input_shape * 32
-        # nn.Linear(n_hidden_dims, n_hidden_dims),
-        #     nn.BatchNorm1d(n_hidden_dims),
-        #     nn.ReLU(),
         self.backbone = nn.Sequential(
             nn.Linear(input_shape, n_hidden_dims),
             nn.ReLU(),
@@ -180,7 +170,6 @@ def train_mine(
             est_mi, _, _ = mine(data[0].to(device), data[1].to(device), net)
         est_mi = est_mi.cpu().numpy()
         history.append(-est_mi)
-        print("num_epoch", i, est_mi, history[-4:])
         if early_stop_patience > 0:
             if hardly_decrease(
                 history,
