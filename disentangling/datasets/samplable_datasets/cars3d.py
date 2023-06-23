@@ -27,3 +27,6 @@ def cars3d(data_path="./data", **kwargs):
     discrete_factors = [s != 24 for s in factor_sizes]
     dataset = SamplableDataset(data, labels, discrete=discrete_factors)
     return get_selected_subsets(dataset, **kwargs)
+
+
+cars3d.shape = [3, 64, 64]

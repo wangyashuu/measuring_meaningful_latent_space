@@ -43,3 +43,6 @@ def chairs3d(data_path="./data", input_size=64, **kwargs):
     discrete = [True, True, False]
     dataset = SamplableDataset(x, y, discrete)
     return get_selected_subsets(dataset, **kwargs)
+
+
+chairs3d.shape = [3, 64, 64]

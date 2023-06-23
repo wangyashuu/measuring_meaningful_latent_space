@@ -19,3 +19,6 @@ def CelebA(data_path="./data", input_size=64, **kwargs):
         root=data_path, transform=transform, download=True, split="all"
     )
     return train_test_split(dataset, **kwargs)
+
+
+CelebA.shape = [3, 64, 64]
