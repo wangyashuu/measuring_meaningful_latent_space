@@ -53,13 +53,18 @@ def draw_object(draw, object: Object):
     x, y = object.coordinates[0] * width, object.coordinates[0] * height
     r = object.size * object.scale * min(width, height)
     if object.shape == Shape.rectangle:
-        draw.regular_polygon(((x, y), r), n_sides=4, fill=object.color.name, rotation=object.rotation)
+        draw.regular_polygon(
+            ((x, y), r),
+            n_sides=4,
+            fill=object.color.name,
+            rotation=object.rotation,
+        )
     elif object.shape == Shape.circle:
         xy = [(x + r, y + r), (x - r, y - r)]
         draw.ellipse(xy, fill=object.color.name)
 
 
-def draw(object, size=(64,64)):
+def draw(object, size=(64, 64)):
     image = Image.new("RGB", size)
     draw = ImageDraw.Draw(image)
     draw_object(draw, object)
@@ -72,7 +77,7 @@ def generate(file_path, size=(64, 64)):
     shape_range = [s.value for s in Shape]
     color_range = [c.value for c in Color]
     coordinate_range = [x / 64 for x in range(0, 64, 4)]
-    rotation_range = [0, 45, 90] # list(range(0, 90, 5))
+    rotation_range = [0, 45, 90]  # list(range(0, 90, 5))
     scale_range = [s / 10 for s in range(5, 20)]
     latents = np.array(
         list(
@@ -105,6 +110,9 @@ def generate(file_path, size=(64, 64)):
     # )
 
 
+generate.shape = [1, 64, 64]
+
+
 class GeneratedsDataset(Dataset):
     def __init__(self, root="data", transform=None):
         file_path = os.path.join(root, "Generateds.npz")
@@ -134,6 +142,10 @@ def Generateds_sets(train_rate=0.8):
     return train_set, val_set
 
 
-image1 = draw(Object(Shape.rectangle, Color.red, (0, 0), rotation=0, scale=0.5))
+image1 = draw(
+    Object(Shape.rectangle, Color.red, (0, 0), rotation=0, scale=0.5)
+)
 image2 = draw(Object(Shape.rectangle, Color.blue, (0, 1), rotation=0, scale=1))
-image3 = draw(Object(Shape.rectangle, Color.yellow, (1, 1), rotation=0, scale=2))
+image3 = draw(
+    Object(Shape.rectangle, Color.yellow, (1, 1), rotation=0, scale=2)
+)

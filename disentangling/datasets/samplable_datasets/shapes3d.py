@@ -14,3 +14,6 @@ def shapes3d(data_path="./data", **kwargs):
     discrete_factors = [False, False, False, False, True, False]
     dataset = SamplableDataset(data, labels, discrete_factors)
     return get_selected_subsets(dataset, **kwargs)
+
+
+shapes3d.shape = [3, 64, 64]

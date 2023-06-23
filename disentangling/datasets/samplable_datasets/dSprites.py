@@ -21,3 +21,6 @@ def dSprites(data_path="./data", **kwargs):
     discrete = [True, False, False, False, False]
     dataset = SamplableDataset(data, labels, discrete)
     return get_selected_subsets(dataset, **kwargs)
+
+
+dSprites.shape = [1, 64, 64]
