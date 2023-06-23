@@ -54,6 +54,51 @@ def dci(factors, codes, test_size=0.3, random_state=None, **kwargs):
     )
 
 
+def dci_importance_matrix(
+    factors,
+    codes,
+    test_size=0.3,
+    random_state=None,
+    discrete_factors=True,
+    **kwargs,
+):
+    """
+    Args:
+        factors: the real generative factors (batch_size, factor_dims).
+        codes: the latent codes (batch_size, code_dims).
+    Returns:
+        scores: Dictionary with average disentanglement score, completeness and
+        informativeness (train and test).
+    """
+    n_factors = factors.shape[1]
+    if type(discrete_factors) is bool:
+        discrete_factors = [discrete_factors] * n_factors
+    n_codes = codes.shape[1]
+    x_train, x_test, y_train, y_test = train_test_split(
+        codes, factors, test_size=test_size, random_state=random_state
+    )
+    importances, train_accuracies, test_accuracies = [], [], []
+    for i, discrete_factor in enumerate(discrete_factors):
+        if discrete_factor:
+            transform = label_transformer(y_train[:, i])
+            y_train_encoded = transform(y_train[:, i])
+            y_test_encoded = transform(y_test[:, i])
+            model = dci_ad_hoc_model()
+            model.fit(x_train, y_train_encoded)
+            importances.append(np.abs(model.feature_importances_))
+            train_accuracies.append(model.score(x_train, y_train_encoded))
+            test_accuracies.append(model.score(x_test, y_test_encoded))
+        else:
+            model = XGBRegressor(tree_method="gpu_hist")
+            model.fit(x_train, y_train[:, i])
+            importances.append(np.abs(model.feature_importances_))
+            train_accuracies.append(model.score(x_train, y_train[:, i]))
+            test_accuracies.append(model.score(x_test, y_test[:, i]))
+
+    importance_matrix = np.stack(importances, axis=1)
+    return importance_matrix
+
+
 def dci_gpu(
     factors,
     codes,

@@ -6,3 +6,4 @@ from .modularity import modularity
 from .dcii import dcii_d, dcii_c, dcii_i, dcii
 from .dci import dci
 from .z_min_var import z_min_var
+from .smoothness import smoothness, smoothness_for_comparison
