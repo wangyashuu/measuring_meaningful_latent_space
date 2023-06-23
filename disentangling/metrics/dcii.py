@@ -113,7 +113,6 @@ def dcii(
     normalized_mutual_infos = mutual_infos / captured
     d_score = _disentanglement(normalized_mutual_infos)
     c_score = _completeness(normalized_mutual_infos)
-    n_factors = factors.shape[1]
     i_score = dcii_i(factors, codes, epsilon=epsilon, mi_improved=mi_improved)
     return dict(
         disentanglement=d_score,
@@ -145,7 +144,6 @@ def dcii_d(
         codes,
         factors,
         estimator=estimator,
-        normalized=True,
         discrete_factors=discrete_factors,
     )
     captured = get_captured_mis(
