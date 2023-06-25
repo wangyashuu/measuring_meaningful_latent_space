@@ -6,6 +6,16 @@ from ...utils.data import SamplableDataset, get_selected_subsets
 
 
 def dSprites(data_path="./data", **kwargs):
+    """dSprites dataset from `dSprites - Disentanglement testing Sprites dataset <https://github.com/deepmind/dsprites-dataset>`
+
+    Args:
+        data_path (string): path to read data
+
+    Returns:
+        torch.utils.data.Dataset: samplable datasets for train
+        torch.utils.data.Dataset: samplable datasets for evaluation
+    """
+
     file_path = Path(data_path) / "dSprites.npz"
 
     if not file_path.exists():
