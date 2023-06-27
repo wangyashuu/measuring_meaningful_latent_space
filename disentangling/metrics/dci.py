@@ -1,34 +1,13 @@
+"""Disentanglement, Completeness and Informativeness (DCI) from `A Framework for the Quantitative Evaluation of Disentangled Representations <https://openreview.net/forum?id=By-7dz-AZ>.
+
+Part of code adapted from: https://github.com/google-research/disentanglement_lib
+"""
+from typing import Union, List, Tuple
 import scipy
 import numpy as np
 from sklearn.model_selection import train_test_split
-from sklearn.ensemble import (
-    GradientBoostingClassifier,
-    HistGradientBoostingClassifier,
-)
-
-# from lightgbm import LGBMClassifier
+from sklearn.ensemble import GradientBoostingClassifier
 from xgboost import XGBClassifier, XGBRegressor
-
-
-def dci_ad_hoc_model(model_name="XGBClassifier"):
-    if model_name == "XGBClassifier":
-        return XGBClassifier(tree_method="gpu_hist")
-    elif model_name == "GradientBoostingClassifier":
-        return GradientBoostingClassifier()
-    elif model_name == "HistGradientBoostingClassifier":
-        return HistGradientBoostingClassifier(
-            max_iter=10, early_stopping=False
-        )
-    return NotImplementedError(f"dci_ad_hoc_model model_name = {model_name}")
-
-
-"""
-Implementation of Disentanglement, Completeness and Informativeness.
-Based on "A Framework for the Quantitative Evaluation of Disentangled
-Representations" (https://openreview.net/forum?id=By-7dz-AZ).
-
-Adapted from: https://github.com/google-research/disentanglement_lib
-"""
 
 
 def label_transformer(train_data):
@@ -44,103 +23,95 @@ def label_transformer(train_data):
     return transform
 
 
-def dci(factors, codes, test_size=0.3, random_state=None, **kwargs):
-    return dci_gpu(
+def dci_collect_relationship(
+    factors: np.ndarray,
+    codes: np.ndarray,
+    test_size: float = 0.3,
+    random_state: Union[float, None] = None,
+    discrete_factors: Union[List[bool], bool] = True,
+    **kwargs,
+) -> Tuple[np.ndarray, List[float], List[float]]:
+    """Compute the relationship for D, C (feature importance matrix), and I (prediction accuracy).
+
+    Args:
+        factors: The real generative factors (batch_size, factor_dims).
+        codes: The latent codes (batch_size, code_dims).
+        test_size (float, optional): The rate of test samples, between 0 and 1. Default: 0.3.
+        random_state (Union[float, None], optional): Seed of random generator for sampling test data. Default: None.
+        discrete_factors (Union[List[bool], bool]): implies if each factor is discrete. Default: True.
+
+    Returns:
+        important_matrix (np.ndarray): [Shape (n_codes, n_factors)] The importance of each code to each factor, where the ij entry represents the importance of code i to the factor j.
+        train_accuracies (List(float)): [Shape (n_factors, )] The accuracy of each factor predition using codes in training.
+        test_accuracies (List(float)): [Shape (n_factors, )] The accuracy of each factor predition using codes in testing.
+    """
+    n_factors = factors.shape[1]
+    if type(discrete_factors) is bool:
+        discrete_factors = [discrete_factors] * n_factors
+    n_codes = codes.shape[1]
+    x_train, x_test, y_train, y_test = train_test_split(
+        codes, factors, test_size=test_size, random_state=random_state
+    )
+    importances, train_accuracies, test_accuracies = [], [], []
+    for i, discrete_factor in enumerate(discrete_factors):
+        if discrete_factor:
+            transform = label_transformer(y_train[:, i])
+            y_train_encoded = transform(y_train[:, i])
+            y_test_encoded = transform(y_test[:, i])
+            model = XGBClassifier(tree_method="gpu_hist")
+            model.fit(x_train, y_train_encoded)
+            importances.append(np.abs(model.feature_importances_))
+            train_accuracies.append(model.score(x_train, y_train_encoded))
+            test_accuracies.append(model.score(x_test, y_test_encoded))
+        else:
+            model = XGBRegressor(tree_method="gpu_hist")
+            model.fit(x_train, y_train[:, i])
+            importances.append(np.abs(model.feature_importances_))
+            train_accuracies.append(model.score(x_train, y_train[:, i]))
+            test_accuracies.append(model.score(x_test, y_test[:, i]))
+
+    importance_matrix = np.stack(importances, axis=1)
+
+    return importance_matrix, train_accuracies, test_accuracies
+
+
+def dci(
+    factors: np.ndarray,
+    codes: np.ndarray,
+    discrete_factors: Union[List[bool], bool] = True,
+    test_size: float = 0.3,
+    random_state: Union[float, None] = None,
+    **kwargs,
+) -> float:
+    """Compute DCI scores.
+
+    Args:
+        factors (np.ndarray): [Shape (batch_size, n_factors)] The real generative factors.
+        codes (np.ndarray): [Shape (batch_size, n_codes)] The latent codes.
+        discrete_factors (Union[List[bool], bool]): implies if each factor is discrete. Default: True.
+        test_size (float, optional): The rate of test samples, between 0 and 1. Default: 0.3.
+        random_state (Union[float, None], optional): Seed of random generator for sampling test data. Default: None.
+
+    Returns:
+        scores (dict): Dictionary where
+            - "d" represents average disentanglement score,
+            - "c" represents average completeness score,
+            - "i" represents informativeness score (in test stage).
+            - "i_train" represents informativeness score (in test stage).
+    """
+    (
+        importance_matrix,
+        train_accuracies,
+        test_accuracies,
+    ) = dci_collect_relationship(
         factors,
         codes,
         test_size=test_size,
         random_state=random_state,
-        **kwargs,
+        discrete_factors=discrete_factors,
     )
 
-
-def dci_importance_matrix(
-    factors,
-    codes,
-    test_size=0.3,
-    random_state=None,
-    discrete_factors=True,
-    **kwargs,
-):
-    """
-    Args:
-        factors: the real generative factors (batch_size, factor_dims).
-        codes: the latent codes (batch_size, code_dims).
-    Returns:
-        scores: Dictionary with average disentanglement score, completeness and
-        informativeness (train and test).
-    """
-    n_factors = factors.shape[1]
-    if type(discrete_factors) is bool:
-        discrete_factors = [discrete_factors] * n_factors
-    n_codes = codes.shape[1]
-    x_train, x_test, y_train, y_test = train_test_split(
-        codes, factors, test_size=test_size, random_state=random_state
-    )
-    importances, train_accuracies, test_accuracies = [], [], []
-    for i, discrete_factor in enumerate(discrete_factors):
-        if discrete_factor:
-            transform = label_transformer(y_train[:, i])
-            y_train_encoded = transform(y_train[:, i])
-            y_test_encoded = transform(y_test[:, i])
-            model = dci_ad_hoc_model()
-            model.fit(x_train, y_train_encoded)
-            importances.append(np.abs(model.feature_importances_))
-            train_accuracies.append(model.score(x_train, y_train_encoded))
-            test_accuracies.append(model.score(x_test, y_test_encoded))
-        else:
-            model = XGBRegressor(tree_method="gpu_hist")
-            model.fit(x_train, y_train[:, i])
-            importances.append(np.abs(model.feature_importances_))
-            train_accuracies.append(model.score(x_train, y_train[:, i]))
-            test_accuracies.append(model.score(x_test, y_test[:, i]))
-
-    importance_matrix = np.stack(importances, axis=1)
-    return importance_matrix
-
-
-def dci_gpu(
-    factors,
-    codes,
-    test_size=0.3,
-    random_state=None,
-    discrete_factors=True,
-    **kwargs,
-):
-    """
-    Args:
-        factors: the real generative factors (batch_size, factor_dims).
-        codes: the latent codes (batch_size, code_dims).
-    Returns:
-        scores: Dictionary with average disentanglement score, completeness and
-        informativeness (train and test).
-    """
-    n_factors = factors.shape[1]
-    if type(discrete_factors) is bool:
-        discrete_factors = [discrete_factors] * n_factors
-    n_codes = codes.shape[1]
-    x_train, x_test, y_train, y_test = train_test_split(
-        codes, factors, test_size=test_size, random_state=random_state
-    )
-    importances, train_accuracies, test_accuracies = [], [], []
-    for i, discrete_factor in enumerate(discrete_factors):
-        if discrete_factor:
-            transform = label_transformer(y_train[:, i])
-            y_train_encoded = transform(y_train[:, i])
-            y_test_encoded = transform(y_test[:, i])
-            model = dci_ad_hoc_model()
-            model.fit(x_train, y_train_encoded)
-            importances.append(np.abs(model.feature_importances_))
-            train_accuracies.append(model.score(x_train, y_train_encoded))
-            test_accuracies.append(model.score(x_test, y_test_encoded))
-        else:
-            model = XGBRegressor(tree_method="gpu_hist")
-            model.fit(x_train, y_train[:, i])
-            importances.append(np.abs(model.feature_importances_))
-            train_accuracies.append(model.score(x_train, y_train[:, i]))
-            test_accuracies.append(model.score(x_test, y_test[:, i]))
-
-    importance_matrix = np.stack(importances, axis=1)
+    # calculte the d c i score from relationship.
     train_accuracy = np.mean(train_accuracies)
     test_accuracy = np.mean(test_accuracies)
 
@@ -150,11 +121,16 @@ def dci_gpu(
     return dict(d=d_score, c=c_score, i=i_score, i_train=train_accuracy)
 
 
-def dci_from_lib(factors, codes, test_size=0.3, random_state=None, **kwargs):
+###
+# the following code is taken or adapted from `disentanglement lib <https://github.com/google-research/disentanglement_lib>`
+###
+def dci_from_disentanglement_lib(
+    factors, codes, test_size=0.3, random_state=None, **kwargs
+):
     """
     Args:
-        factors: the real generative factors (batch_size, factor_dims).
-        codes: the latent codes (batch_size, code_dims).
+        factors (np.ndarray): [Shape (batch_size, n_factors)] The real generative factors.
+        codes (np.ndarray): [Shape (batch_size, n_codes)] The latent codes.
     Returns:
         scores: Dictionary with average disentanglement score, completeness and
         informativeness (train and test).
@@ -206,7 +182,6 @@ def compute_importance_gbt(x_train, y_train, x_test, y_test):
 
 def disentanglement_per_code(importance_matrix):
     """Compute disentanglement score of each code."""
-    # importance_matrix is of shape [num_codes, num_factors].
     return 1.0 - scipy.stats.entropy(
         importance_matrix.T + 1e-11, base=importance_matrix.shape[1]
     )
@@ -224,7 +199,6 @@ def disentanglement(importance_matrix):
 
 def completeness_per_factor(importance_matrix):
     """Compute completeness of each factor."""
-    # importance_matrix is of shape [num_codes, num_factors].
     return 1.0 - scipy.stats.entropy(
         importance_matrix + 1e-11, base=importance_matrix.shape[0]
     )

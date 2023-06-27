@@ -1,29 +1,29 @@
+"""Mutual Information Gap (MIG) from `Isolating Sources of Disentanglement in Variational Autoencoders <https://arxiv.org/abs/1802.04942>`."""
+from typing import Union, List
 import numpy as np
 
 from disentangling.utils.mi import get_mutual_infos, get_entropies
 
-"""Mutual Information Gap from the beta-TC-VAE paper.
-Based on "Isolating Sources of Disentanglement in Variational Autoencoders"
-(https://arxiv.org/pdf/1802.04942.pdf).
-"""
-
 
 def mig(
-    factors,
-    codes,
-    estimator="ksg",
-    discrete_factors=False,
-    epsilon=1e-10,
+    factors: np.ndarray,
+    codes: np.ndarray,
+    estimator: str = "ksg",
+    discrete_factors: Union[List[bool], bool] = False,
+    epsilon: float = 1e-10,
     **kwargs
-):
-    """
-    Compute MIG
+) -> float:
+    """Compute MIG score.
 
     Args:
-        factors: the real generative factors (batch_size, factor_dims).
-        codes: the latent codes (batch_size, code_dims).
+        factors (np.ndarray): [Shape (batch_size, n_factors)] The real generative factors.
+        codes (np.ndarray): [Shape (batch_size, n_codes)] The latent codes.
+        estimator (str, optional): String in ["ksg", "bins", "mine"], each represents different method to estimate mutual information, see more in `disentangling.utils.mi`. Default: "ksg".
+        discrete_factors (Union[List[bool], bool]): It implies if each factor is discrete. Default: True.
+        epsilon (float, optional): Epsilon (the very small number) used in calculation. Default: 1e-10.
+
     Returns:
-        score
+        score (float): the overall MIG score
     """
     # mutual_info matrix (n_codes, n_factors)
     mutual_infos = get_mutual_infos(
