@@ -68,7 +68,7 @@ def compute_factor_vae_loss(
     distribution: str = "bernoulli",
     *args,
     **kwargs,
-):
+) -> dict:
     """Compute the FactorVAE loss.
 
     Learning object of FactorVAE from `Disentangling by Factorizing <https://arxiv.org/abs/1802.05983>.`
@@ -85,7 +85,7 @@ def compute_factor_vae_loss(
             - "loss" represents the total loss,
             - "reconstruction_loss" represents the $\mathbb{E}_{\hat p(x)}[\mathbb{E}_{z \sim q_{\phi}(z|x)} [- \log p_{\theta}(x|z)]]$,
             - "kld_loss" represents $D_{KL} ({q_{\phi}(z | x^{(i)})} | {p_{\theta}(z)})$.
-            - "d_tc_loss" represents $\mathrm{TC}(q_\phi(z))$. 
+            - "d_tc_loss" represents $\mathrm{TC}(q_\phi(z))$.
     """
     output = factor_vae(input)
     decoded, mu, logvar, z = output
@@ -119,7 +119,7 @@ def compute_factor_vae_discriminator_loss(
     factor_vae_discriminator: FactorVAEDiscriminator,
     *args,
     **kwargs,
-):
+) -> dict:
     """Compute the FactorVAE discriminator loss.
 
     Learning object of FactorVAE from `Disentangling by Factorizing <https://arxiv.org/pdf/1802.05983>.`
