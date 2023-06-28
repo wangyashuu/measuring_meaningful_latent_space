@@ -105,6 +105,8 @@ def compute_vae_loss(
 ) -> dict:
     """Compute the input Variational autoencoder loss.
 
+    Learning object of VAE from `Auto-Encoding Variational Bayes <https://arxiv.org/abs/1312.6114>`
+
     Args:
         input (torch.nn.Tensor): The input tensor.
         vae (torch.nn.Module): Variational autoendoer model that accept the shape same as the input.
