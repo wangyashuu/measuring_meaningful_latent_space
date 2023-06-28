@@ -15,7 +15,6 @@ from disentangling.utils.nn import (
 def create_datasets(conf):
     conf = conf.copy()
     name = conf.pop("name")
-    conf.pop("input_shape")
     D = getattr(disentangling.datasets, name)
     if not hasattr(disentangling.datasets, name):
         raise Exception(f"dataset {name} not implemented")
@@ -133,3 +132,7 @@ def create_metrics(confs):
         getattr(disentangling.metrics, metric_name) for metric_name in confs
     ]
     return metric_funcs
+
+
+def create_input_shape(conf):
+    return getattr(disentangling.datasets, conf).shape
