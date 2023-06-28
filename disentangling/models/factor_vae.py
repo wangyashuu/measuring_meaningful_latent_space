@@ -1,5 +1,3 @@
-from typing import Tuple
-
 import torch
 from torch import nn, Tensor
 import torch.nn.functional as F
@@ -8,6 +6,7 @@ from ..utils.loss import get_reconstruction_loss, get_kld_loss
 
 
 def permute_latent(z):
+    """Permute the latent values in each latent dimension."""
     permuted = []
     n_latent_dim = z.shape[1]
     for i in range(n_latent_dim):
@@ -17,32 +16,77 @@ def permute_latent(z):
 
 
 class FactorVAE(VAE):
-    def __init__(
-        self,
-        encoder: nn.Module,
-        decoder: nn.Module,
-        encoder_output_shape: Tuple,
-        decoder_input_shape: Tuple,
-        latent_dim: int,
-    ) -> None:
-        super().__init__(
-            encoder,
-            decoder,
-            encoder_output_shape,
-            decoder_input_shape,
-            latent_dim,
+    pass
+
+
+class FactorVAEDiscriminator(nn.Module):
+    """Discriminator of FactorVAE.
+
+    learn to the density ratio needed for estimating TC. where
+        - output[0] an the probability that its input is a sample from $q(z)$ rather than $\bar q(z)$.
+        - output[1] an the probability that its input is a sample from $\bar q(z)$ rather than $q(z)$.
+    """
+
+    def __init__(self, latent_dim: int) -> None:
+        """Creates the discriminator backbone
+
+        Args:
+            latent_dim (int): the latent dimentionality of the corresponding FactorVAE
+        """
+
+        super().__init__()
+        ###
+        # issuse when use batch norm in ddp and forward two times:
+        # ref: (https://github.com/pytorch/pytorch/issues/66504, https://github.com/pytorch/pytorch/issues/73332, https://github.com/pytorch/pytorch/issues/26288)
+        # please set track_running_stats = false
+        ###
+        self.backbone = nn.Sequential(
+            nn.Linear(latent_dim, 1000),
+            nn.LeakyReLU(0.2),
+            nn.Linear(1000, 1000),
+            nn.LeakyReLU(0.2),
+            nn.Linear(1000, 1000),
+            nn.LeakyReLU(0.2),
+            nn.Linear(1000, 1000),
+            nn.LeakyReLU(0.2),
+            nn.Linear(1000, 1000),
+            nn.LeakyReLU(0.2),
+            nn.Linear(1000, 1000),
+            nn.LeakyReLU(0.2),
+            nn.Linear(1000, 2),
         )
+
+    def forward(self, input: Tensor) -> Tensor:
+        return self.backbone(input)
 
 
 def compute_factor_vae_loss(
-    input,
-    factor_vae,
-    factor_vae_discriminator,
-    d_tc_loss_factor,
-    distribution="bernoulli",
+    input: Tensor,
+    factor_vae: FactorVAE,
+    factor_vae_discriminator: FactorVAEDiscriminator,
+    d_tc_loss_factor: float,
+    distribution: str = "bernoulli",
     *args,
     **kwargs,
-):
+) -> dict:
+    """Compute the FactorVAE loss.
+
+    Learning object of FactorVAE from `Disentangling by Factorizing <https://arxiv.org/abs/1802.05983>.`
+
+    Args:
+        input (torch.Tensor): The input tensor
+        factor_vae (FactorVAE): Factor model that accept the shape same as the input.
+        factor_vae_discriminator (FactorVAEDiscriminator): discriminator model of the corresponding FactorVAE.
+        d_tc_loss_factor (float): Parameter for $\mathrm{TC}(q_\phi(z))$ in the learning object of FactorVAE.
+        distribution (str): string in ["bernoulli", "gaussian"] describe the distribution of input sample, which will effect the reconstruction loss calculation: "bernoulli" will use BCE loss, while "gaussian" will use MSE loss.
+
+    Returns:
+        dict: the dict with loss name (string) as key and loss value (Tensor) as value, where
+            - "loss" represents the total loss,
+            - "reconstruction_loss" represents the $\mathbb{E}_{\hat p(x)}[\mathbb{E}_{z \sim q_{\phi}(z|x)} [- \log p_{\theta}(x|z)]]$,
+            - "kld_loss" represents $D_{KL} ({q_{\phi}(z | x^{(i)})} | {p_{\theta}(z)})$.
+            - "d_tc_loss" represents $\mathrm{TC}(q_\phi(z))$.
+    """
     output = factor_vae(input)
     decoded, mu, logvar, z = output
 
@@ -69,42 +113,28 @@ def compute_factor_vae_loss(
     )
 
 
-class FactorVAEDiscriminator(nn.Module):
-    def __init__(self, latent_dim) -> None:
-        super().__init__()
-        ###
-        # learn to the density ratio needed for estimating TC.
-        # output[0] an the probability that its input is a sample from q(z) rather than ̄q(z).
-        # output[1] an the probability that its input is a sample from ̄q(z) rather than q(z).
-        ###
-        ###
-        # issuse when use batch norm in ddp and forward two times:
-        # ref (https://github.com/pytorch/pytorch/issues/66504, https://github.com/pytorch/pytorch/issues/73332, https://github.com/pytorch/pytorch/issues/26288)
-        # please set track_running_stats = false
-        ###
-        self.backbone = nn.Sequential(
-            nn.Linear(latent_dim, 1000),
-            nn.LeakyReLU(0.2),
-            nn.Linear(1000, 1000),
-            nn.LeakyReLU(0.2),
-            nn.Linear(1000, 1000),
-            nn.LeakyReLU(0.2),
-            nn.Linear(1000, 1000),
-            nn.LeakyReLU(0.2),
-            nn.Linear(1000, 1000),
-            nn.LeakyReLU(0.2),
-            nn.Linear(1000, 1000),
-            nn.LeakyReLU(0.2),
-            nn.Linear(1000, 2),
-        )
-
-    def forward(self, input: Tensor) -> Tensor:
-        return self.backbone(input)
-
-
 def compute_factor_vae_discriminator_loss(
-    input, factor_vae, factor_vae_discriminator, *args, **kwargs
-):
+    input: Tensor,
+    factor_vae: FactorVAE,
+    factor_vae_discriminator: FactorVAEDiscriminator,
+    *args,
+    **kwargs,
+) -> dict:
+    """Compute the FactorVAE discriminator loss.
+
+    Learning object of FactorVAE from `Disentangling by Factorizing <https://arxiv.org/pdf/1802.05983>.`
+
+    Args:
+        input (torch.Tensor): The input tensor
+        factor_vae (FactorVAE): Factor model that accept the shape same as the input.
+        factor_vae_discriminator (FactorVAEDiscriminator): Discriminator model of the corresponding FactorVAE.
+
+    Returns:
+        dict: The dict with loss name (string) as key and loss value (Tensor) as value, where
+            - "discriminator_loss" represents the total loss,
+            - "d_accuracy" represents the accuracy of discriminator (return this value for debug/log).
+    """
+
     vae_output = factor_vae(input)
     decoded, mu, logvar, z = vae_output
     z = z.detach()  # TODO: remove this

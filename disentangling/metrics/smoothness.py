@@ -1,3 +1,4 @@
+from typing import Union, List, Optional
 import numpy as np
 from sklearn.neighbors import KDTree
 
@@ -5,35 +6,27 @@ from disentangling.utils.mi import get_mutual_infos, get_entropies
 
 
 def atleast_2d(arr):
+    """Reshape to 2-d array if it is a 1-d array."""
     if len(arr.shape) == 1:
         return arr.reshape(arr.shape[0], 1)
     return arr
 
 
 def get_tp(y_truth, y_pred):
+    """Return a set of the true positive elements between two set."""
     tp = set(y_truth) & set(y_pred)
     return tp
 
 
-def fbeta_score(y_truth, y_pred, beta=1, eps=1e-16):
-    tp = get_tp(y_truth, y_pred)
-    precision = len(tp) / (len(y_pred) + eps)
-    recall = len(tp) / (len(y_truth) + eps)
-    f = (
-        (1 + beta**2)
-        * (precision * recall)
-        / ((beta**2) * precision + recall + eps)
-    )
-    return f
-
-
 def precision_score(y_truth, y_pred, eps=1e-16):
+    """Calculate the precision score for two clusters."""
     tp = get_tp(y_truth, y_pred)
     precision = len(tp) / (len(y_pred) + eps)
     return precision
 
 
 def cluster_for_discrete(x):
+    """Cluster each categories of x"""
     classes = np.unique(x)
     index_map = {c: np.where(x == c)[0] for c in classes}
     rs = [index_map[x_i.item()] for x_i in x]
@@ -78,8 +71,24 @@ def get_top_indices(relationship, threshold=0.5):
 
 
 def smoothness(
-    factors, codes, n_neighbors=None, discrete_factors=False
-):
+    factors: np.ndarray,
+    codes: np.ndarray,
+    n_neighbors: Optional[int] = None,
+    discrete_factors: Union[List[bool], bool] = False,
+) -> np.ndarray:
+    """Compute smoothness score for each factor.
+
+    Args:
+        codes (np.ndarray): [Shape (batch_size, n_codes)] The latent codes.
+        factors (np.ndarray): [Shape (batch_size, n_factors)] The real generative factors.
+        discrete_factors (Union[List[bool], bool]): implies if each factor is discrete. Default: False.
+        test_size (float, optional): The rate of test samples, between 0 and 1. Default: 0.3.
+        random_state (Union[float, None], optional): Seed of random generator for sampling test data. Default: None.
+
+    Returns:
+        scores (np.ndarray): [Shape (n_factors, )] A list where each represents smoothness score for each factor.
+    """
+
     # get target factor and code
     mi_matrix = get_mutual_infos(
         codes, factors, estimator="ksg", discrete_factors=discrete_factors
@@ -116,7 +125,7 @@ def smoothness(
     return results
 
 
-from .dci import dci_importance_matrix
+from .dci import dci_collect_relationship
 
 
 def corrcoef_for_pairs(x, y):
@@ -124,8 +133,24 @@ def corrcoef_for_pairs(x, y):
 
 
 def smoothness_for_comparison(
-    factors, codes, n_neighbors=None, discrete_factors=False
+    factors: np.ndarray,
+    codes: np.ndarray,
+    n_neighbors: Optional[int] = None,
+    discrete_factors: Union[List[bool], bool] = False,
 ):
+    """The method is for research, it calculates mutual inforamtions, feature importance, correlation coefficient and smoothness for comparison.
+
+    Args:
+        codes (np.ndarray): [Shape (batch_size, n_codes)] The latent codes.
+        factors (np.ndarray): [Shape (batch_size, n_factors)] The real generative factors.
+        discrete_factors (Union[List[bool], bool]): implies if each factor is discrete. Default: True.
+        test_size (float, optional): The rate of test samples, between 0 and 1. Default: 0.3.
+        random_state (Union[float, None], optional): Seed of random generator for sampling test data. Default: None.
+
+    Returns:
+        scores (dict): All scores mentioned above where dict key is the name and dict value is the score
+    """
+
     # get target factor and code
     mi_matrix = get_mutual_infos(
         codes, factors, estimator="ksg", discrete_factors=discrete_factors
@@ -149,7 +174,7 @@ def smoothness_for_comparison(
     scores = []
     corrcoefs = []
     mis = []
-    importance_matrix = dci_importance_matrix(
+    importance_matrix, _, _ = dci_collect_relationship(
         factors, codes, discrete_factors=discrete_factors
     )
     im_max = np.max(importance_matrix, axis=0)

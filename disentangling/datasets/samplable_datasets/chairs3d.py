@@ -7,21 +7,30 @@ from PIL import Image
 from ...utils.data import SamplableDataset, get_selected_subsets
 
 
-def read_image(p, size=64):
+def read_image(p, size=64, center_crop=1):
     pic = Image.open(p)
-    # width, height = pic.size   # Get dimensions
-    # new_width, new_height = width * 0.8, height * 0.8
-    # # Crop the center of the image
-    # left = (width - new_width)/2
-    # top = (height - new_height)/2
-    # right = (width + new_width)/2
-    # bottom = (height + new_height)/2
-    # pic = pic.crop((left, top, right, bottom))
+    if center_crop < 1:
+        width, height = pic.size
+        negative = 0.5 - center_crop / 2
+        positive = 0.5 - center_crop / 2
+        left, top = width * negative, height * negative
+        right, bottom = width * positive, height * positive
+        pic = pic.crop((left, top, right, bottom))
     pic.thumbnail((size, size), Image.ANTIALIAS)
     return pic
 
 
-def chairs3d(data_path="./data", input_size=64, **kwargs):
+def chairs3d(data_path="./data", **kwargs):
+    """Chairs3d dataset from `Seeing 3D chairs: exemplar part-based 2D-3D alignment using a large dataset of CAD models <https://ieeexplore.ieee.org/document/6909876>`
+
+    Args:
+        data_path (string): path to read data
+
+    Returns:
+        torch.utils.data.Dataset: samplable datasets for train
+        torch.utils.data.Dataset: samplable datasets for evaluation
+    """
+
     # tar -xf nips2015-analogy-data.tar.gz
     # mv data cars3d
     file_path = Path(data_path) / "rendered_chairs"

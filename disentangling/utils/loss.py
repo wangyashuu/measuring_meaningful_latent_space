@@ -1,9 +1,23 @@
 import torch
+from torch import Tensor
 from torch.nn import functional as F
 from torch.distributions.normal import Normal
 
 
-def get_reconstruction_loss(output, input, distribution):
+def get_reconstruction_loss(
+    output: Tensor, input: Tensor, distribution: str = "bernoulli"
+):
+    """Compute the reconstruction loss for VAE.
+
+    Args:
+        output (Tensor): Tensor with any shape.
+        input (Tensor): Tensor that has same shape as output.
+        distribution (str): String in ["bernoulli", "gaussian"] describe the distribution of input sample, which will effect the reconstruction loss calculation: "bernoulli" will use BCE loss, while "gaussian" will use MSE loss.
+
+    Returns:
+        loss (Tensor): Loss of each sample.
+
+    """
     batch_size = input.shape[0]
     if distribution == "bernoulli":
         loss = F.binary_cross_entropy_with_logits(
@@ -18,7 +32,15 @@ def get_reconstruction_loss(output, input, distribution):
     return loss / batch_size
 
 
-def get_kld_loss(mu, logvar):
+def get_kld_loss(mu: Tensor, logvar: Tensor):
+    """Compute the kld loss for VAE.
+     Args:
+        mu (torch.nn.Tensor): The excepted mean of gaussian distribution.
+        var (torch.nn.Tensor): The excepted variance of gaussian distribution.
+
+    Returns:
+        Tensor: The kld loss of given mean and log variance.
+    """
     kld_loss = -0.5 * (1 + logvar - mu**2 - logvar.exp()).sum(1).mean()
     return kld_loss
 
@@ -39,12 +61,26 @@ def log_importance_weight_matrix(batch_size, dataset_size):
 
 
 def get_kld_decomposed_losses(
-    z,
-    mu,
-    logvar,
-    dataset_size=None,
-    minibatch_stratified_sampling=True,
+    z: Tensor,
+    mu: Tensor,
+    logvar: Tensor,
+    dataset_size: int = None,
+    minibatch_stratified_sampling: bool = True,
 ):
+    """Calculate the mutual information loss, tc loss and dimension-wise kl loss for BetaTCVAE.
+
+    Code adapted from the offical `BetaTCVAE implementation <https://github.com/rtqichen/beta-tcvae/blob/master/vae_quant.py>`
+
+    Args:
+        z (Tensor): The latent codes of any shape.
+        mu (Tensor): The mean of gaussian distribution which is the latent representation $z$ sampled from.
+        var (Tensor): The variance of gaussian distribution  which is the latent representation $z$ sampled from.
+        dataset_size (int, optional): The size of dataset, only available when not using the minibatch stratified sampling. Default: 0.
+        minibatch_stratified_sampling (bool, optional): If using the minibatch stratified sampling for loss calculation. Default: True.
+
+    Returns:
+        tuple: Tuple which includes mutual_info_loss, tc_loss, dimension_wise_kl_loss
+    """
     batch_size = z.shape[0]
     device = z.device
     std = torch.exp(0.5 * logvar)

@@ -1,8 +1,4 @@
-from typing import Tuple
-
-import torch
-from torch import Tensor, nn
-from torch.distributions.normal import Normal
+from torch import Tensor
 
 from .vae import VAE
 from ..utils.loss import (
@@ -12,64 +8,46 @@ from ..utils.loss import (
 )
 
 
-def log_density_gaussian(x: Tensor, mu: Tensor, logvar: Tensor):
-    import math
-
-    """
-    Computes the log pdf of the Gaussian with parameters mu and logvar at x
-    :param x: (Tensor) Point at whichGaussian PDF is to be evaluated
-    :param mu: (Tensor) Mean of the Gaussian distribution
-    :param logvar: (Tensor) Log variance of the Gaussian distribution
-    :return:
-    """
-    norm = -0.5 * (math.log(2 * math.pi) + logvar)
-    log_density = norm - 0.5 * ((x - mu) ** 2 * torch.exp(-logvar))
-    return log_density
-
-
-# def log_prob(value, mu, std):
-#     # compute the variance
-#     var = std**2
-#     log_scale = torch.log(std)
-#     return (
-#         -((value - mu) ** 2) / (2 * var)
-#         - log_scale
-#         - math.log(math.sqrt(2 * math.pi))
-#     )
-
-
 class BetaTCVAE(VAE):
-    def __init__(
-        self,
-        encoder: nn.Module,
-        decoder: nn.Module,
-        encoder_output_shape: Tuple,
-        decoder_input_shape: Tuple,
-        latent_dim: int,
-    ) -> None:
-        super().__init__(
-            encoder,
-            decoder,
-            encoder_output_shape,
-            decoder_input_shape,
-            latent_dim,
-        )
+    pass
 
 
 def compute_beta_tcvae_loss(
-    input,
-    beta_tcvae,
-    minibatch_stratified_sampling,
-    mutual_info_loss_factor,
-    tc_loss_factor,
-    dimension_wise_kl_loss_factor,
-    dataset_size=None,
-    distribution="bernoulli",
-    step=0,
-    beta=None,
+    input: Tensor,
+    beta_tcvae: BetaTCVAE,
+    mutual_info_loss_factor: float,
+    tc_loss_factor: float,
+    dimension_wise_kl_loss_factor: float,
+    distribution: str = "bernoulli",
+    minibatch_stratified_sampling: bool = True,
+    dataset_size: int = 0,
     *args,
     **kwargs,
 ) -> dict:
+    """Compute the BetaTCVAE loss.
+
+    Learning object of BetaTCVAE from `Isolating Sources of Disentanglement in Variational Autoencoders <https://arxiv.org/abs/1802.04942>`
+
+    Args:
+        input (torch.Tensor): The input tensor
+        beta_vae (BetaTCVAE): BetaVAE model that accept the shape same as the input.
+        mutual_info_loss_factor (float): Parameter for $I_{q_\phi}(x;z)$ in the learning object of BetaTCVAE.
+        tc_loss_factor (float): Parameter for $\textrm{TC}(q_\phi(z))$ in the learning object of BetaTCVAE.
+        dimension_wise_kl_loss_factor (string): Parameter for $\sum_j D_{\textrm{KL}}(q_\phi(z_j) || p(z_j))$ in the learning object of BetaTCVAE.
+        distribution (str, optional): String in ["bernoulli", "gaussian"] describe the distribution of input sample, which will effect the reconstruction loss calculation: "bernoulli" will use BCE loss, while "gaussian" will use MSE loss. Default: "bernoulli".
+        minibatch_stratified_sampling (bool, optional): If using the minibatch stratified sampling for loss calculation. Default: True.
+        dataset_size (int, optional): The size of dataset, only available when not using the minibatch stratified sampling. Default: 0.
+
+    Returns:
+        dict: The dict with loss name (string) as key and loss value (Tensor) as value, where
+            - "loss" represents the total loss,
+            - "reconstruction_loss" represents $\mathbb{E}_{\hat p(x)}[\mathbb{E}_{z \sim q_{\phi}(z|x)} [- \log p_{\theta}(x|z)]]$,
+            - "mutual_info_loss" represents $I_{q_\phi}(x;z)$,
+            - "tc_loss" represents $\textrm{TC}(q_\phi(z))$,
+            - "dimension_wise_kl_loss" represents $\sum_j D_{\textrm{KL}}(q_\phi(z_j) || p(z_j))$,
+            - "kld_loss" represents $D_{KL} ({q_{\phi}(z | x^{(i)})} | {p_{\theta}(z)})$.
+    """
+
     output = beta_tcvae(input)
     decoded, mu, logvar, z = output
 
@@ -87,17 +65,6 @@ def compute_beta_tcvae_loss(
         dataset_size=dataset_size,
         minibatch_stratified_sampling=minibatch_stratified_sampling,
     )
-
-    if beta is not None:
-        loss = reconstruction_loss + beta * kld_loss
-        return dict(
-            loss=loss,
-            reconstruction_loss=reconstruction_loss,
-            kld_loss=kld_loss,
-            mutual_info_loss=mutual_info_loss,
-            tc_loss=tc_loss,
-            dimension_wise_kl_loss=dimension_wise_kl_loss,
-        )
 
     loss = (
         reconstruction_loss

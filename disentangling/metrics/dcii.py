@@ -1,3 +1,4 @@
+from typing import Union, List
 import numpy as np
 
 from disentangling.utils.mi import (
@@ -8,13 +9,28 @@ from disentangling.utils.mi import (
 
 
 def estimate_mi_codes_and_factor(
-    codes,
-    factor,
-    estimate_by="mine",
-    estimator=None,
-    discrete_factor=False,
-):
-    # I(C; z)
+    codes: np.ndarray,
+    factor: np.ndarray,
+    discrete_factor: bool = False,
+    estimate_by: str = "mine",
+    estimator: str = "ksg",
+) -> float:
+    """Calculate mutual infors between codes $c$ and factor $z_j$ I(c; z_j).
+
+    Args:
+        codes (np.ndarray): [Shape (batch_size, n_codes)] The latent codes.
+        factor (np.ndarray): [Shape (batch_size, )] On dimension in factor representation.
+        discrete_factors (bool): It implies if the factor is discrete. Default: True.
+        estimate_by (str, optional): String in ["mine", "max", "sum"] The method of estimating the mutual information between codes $c$ and factor $z_j$, I(C; z_j), where "mine" will use a neural network to estimate, "max" will approximate $I(c;z_j)$ as the maximum entry $\max_i I(c_i; z_j)", and "sum" will approximate $I(c;z_j)$ as sum $\sum_i I(c_i; z_j)". Default: "mine".
+        estimator (str, optional): String in ["ksg", "bins", "mine"], each represents different method to estimate mutual information (see more in `disentangling.utils.mi`). If $I(c;z_j)$ is not estimated by mine, we need the estimated mutual information I(c_i;z_j) to approximate the value, see more in above. Default: "ksg".
+
+    Returns:
+        scores (dict):  Dictionary where
+            - "d" represents average disentanglement score,
+            - "c" represents average completeness score,
+            - "i" represents average informativeness score.
+    """
+
     if estimate_by == "mine":
         if codes.shape[1] < 4:
             return get_mutual_info(codes, factor, estimator="ksg")
@@ -35,12 +51,27 @@ def estimate_mi_codes_and_factor(
 
 
 def get_captured_mis(
-    codes,
-    factors,
-    discrete_factors=False,
-    estimate_mi_codes_and_factor_by="mine",
-    estimator=None,
-):
+    codes: np.ndarray,
+    factors: np.ndarray,
+    discrete_factors: Union[List[bool], bool] = False,
+    estimate_mi_codes_and_factor_by: str = "mine",
+    estimator: str = "ksg",
+) -> float:
+    """Calculate mutual infors between codes $c$ and factor $z_j$ I(c; z_j), for each dimension in factors.
+
+    Args:
+        codes (np.ndarray): [Shape (batch_size, n_codes)] The latent codes.
+        factors (np.ndarray): [Shape (batch_size, n_factors)] The real generative factors.
+        discrete_factors (Union[List[bool], bool]): It implies if each factor is discrete. Default: True.
+        estimate_mi_codes_and_factor_by (str, optional): String in ["mine", "max", "sum"] The method of estimating the mutual information between codes $c$ and factor $z_j$, I(C; z_j), where "mine" will use a neural network to estimate, "max" will approximate $I(c;z_j)$ as the maximum entry $\max_i I(c_i; z_j)", and "sum" will approximate $I(c;z_j)$ as sum $\sum_i I(c_i; z_j)". Default: "mine".
+        estimator (str, optional): String in ["ksg", "bins", "mine"], each represents different method to estimate mutual information (see more in `disentangling.utils.mi`). If $I(c;z_j)$ is not estimated by mine, we need the estimated mutual information I(c_i;z_j) to approximate the value, see more in above. Default: "ksg".
+
+    Returns:
+        scores (dict):  Dictionary where
+            - "d" represents average disentanglement score,
+            - "c" represents average completeness score,
+            - "i" represents average informativeness score.
+    """
     n_codes = codes.shape[1]
     n_factors = factors.shape[1]
     if type(discrete_factors) is bool:
@@ -50,16 +81,31 @@ def get_captured_mis(
         estimate_mi_codes_and_factor(
             codes,
             factors[:, i],
+            discrete_factor=discrete_factor,
             estimate_by=estimate_mi_codes_and_factor_by,
             estimator=estimator,
-            discrete_factor=discrete_factor,
         )
         for i, discrete_factor in enumerate(discrete_factors)
     ]
     return np.array(captured_mis)
 
 
-def exclusive_rate(target, axis=0, keepdims=True):
+def exclusive_rate(
+    target: np.ndarray, axis: int = 0, keepdims: bool = True
+) -> Union[np.ndarray, float]:
+    """Calculate exclusive rate.
+
+    $$ \max target - \sqrt \sum target_i, \text{ where} i \neq \argmax target $$
+
+    Args:
+        target (np.ndarray): An 1-d array or 2-d array.
+        axis (int): The axis to compute the exclusive rate along with.
+        keepdims (bool): If keep the dims.
+
+    Returns:
+        (Union[np.ndarray, float]): the exclusive rate along the given axis.
+    """
+
     n = target.shape[axis]
     aggregate_params = dict(axis=axis, keepdims=keepdims)
     max_item = np.max(target, **aggregate_params)
@@ -70,7 +116,8 @@ def exclusive_rate(target, axis=0, keepdims=True):
     return correctness - errorness
 
 
-def _disentanglement(mutual_infos):
+def _disentanglement(mutual_infos: np.ndarray) -> float:
+    """Compute the disentanglement scores from mutual information [Shape (n_codes, n_factors)]."""
     n_codes, n_factors = mutual_infos.shape
     scored_mutual_infos = np.zeros((n_codes, n_factors))
     for c in range(n_codes):
@@ -82,21 +129,36 @@ def _disentanglement(mutual_infos):
     return np.sum(scored) / n_factors
 
 
-def _completeness(mutual_infos):
+def _completeness(mutual_infos: np.ndarray) -> float:
+    """Compute the completeness scores from mutual information."""
     n_codes, n_factors = mutual_infos.shape
     return np.sum(exclusive_rate(mutual_infos, axis=0)) / n_factors
 
 
 def dcii(
-    factors,
-    codes,
-    epsilon=1e-10,
-    mi_improved=True,
-    discrete_factors=False,
-    estimate_mi_codes_and_factor_by="mine",
-):
-    # mutual_info matrix (n_codes, n_factors)
-    estimator = "ksg" if mi_improved else "bins"
+    factors: np.ndarray,
+    codes: np.ndarray,
+    discrete_factors: Union[List[bool], bool] = False,
+    estimator: str = "ksg",
+    estimate_mi_codes_and_factor_by: str = "mine",
+    epsilon: float = 1e-10,
+) -> dict:
+    """Calculate DCII scores.
+
+    Args:
+        factors (np.ndarray): [Shape (batch_size, n_factors)] The real generative factors.
+        codes (np.ndarray): [Shape (batch_size, n_codes)] The latent codes.
+        discrete_factors (Union[List[bool], bool]): It implies if each factor is discrete. Default: True.
+        estimator (str, optional): String in ["ksg", "bins", "mine"], each represents different method to estimate mutual information, see more in `disentangling.utils.mi`. Default: "ksg".
+        estimate_mi_codes_and_factor_by (str, optional): estimator of estimating the mutual information between codes $c$ and factor $z_j$, I(C; z_j). Default: "mine".
+        epsilon (float, optional): Epsilon (the very small number) used in calculation. Default: 1e-10.
+
+    Returns:
+        scores (dict):  Dictionary where
+            - "d" represents average disentanglement score,
+            - "c" represents average completeness score,
+            - "i" represents average informativeness score.
+    """
     mutual_infos = get_mutual_infos(
         codes,
         factors,
@@ -110,10 +172,10 @@ def dcii(
         estimator=estimator,
         discrete_factors=discrete_factors,
     )
-    normalized_mutual_infos = mutual_infos / captured
+    normalized_mutual_infos = mutual_infos / (captured + epsilon)
     d_score = _disentanglement(normalized_mutual_infos)
     c_score = _completeness(normalized_mutual_infos)
-    i_score = dcii_i(factors, codes, epsilon=epsilon, mi_improved=mi_improved)
+    i_score = dcii_i(factors, codes, epsilon=epsilon, estimator=estimator)
     return dict(
         disentanglement=d_score,
         completeness=c_score,
@@ -122,24 +184,26 @@ def dcii(
 
 
 def dcii_d(
-    factors,
-    codes,
-    epsilon=1e-10,
-    mi_improved=True,
-    discrete_factors=False,
-    estimate_mi_codes_and_factor_by="mine",
-):
-    """
-    Compute disentanglement
+    factors: np.ndarray,
+    codes: np.ndarray,
+    discrete_factors: Union[List[bool], bool] = False,
+    estimator: str = "ksg",
+    estimate_mi_codes_and_factor_by: str = "mine",
+    epsilon: float = 1e-10,
+) -> float:
+    """Calculate DCII(D) score.
 
     Args:
-        factors: the real generative factors (batch_size, factor_dims).
-        codes: the latent codes (batch_size, code_dims).
+        factors (np.ndarray): [Shape (batch_size, n_factors)] The real generative factors.
+        codes (np.ndarray): [Shape (batch_size, n_codes)] The latent codes.
+        discrete_factors (Union[List[bool], bool]): It implies if each factor is discrete. Default: True.
+        estimator (str, optional): String in ["ksg", "bins", "mine"], each represents different method to estimate mutual information, see more in `disentangling.utils.mi`. Default: "ksg".
+        estimate_mi_codes_and_factor_by (str, optional): estimator of estimating the mutual information between codes $c$ and factor $z_j$, I(C; z_j). Default: "mine".
+        epsilon (float, optional): Epsilon (the very small number) used in calculation. Default: 1e-10.
+
     Returns:
-        score
+        score (float): Average disentanglement score.
     """
-    # mutual_info matrix (n_codes, n_factors)
-    estimator = "ksg" if mi_improved else "bins"
     mutual_infos = get_mutual_infos(
         codes,
         factors,
@@ -153,30 +217,32 @@ def dcii_d(
         estimator=estimator,
         discrete_factors=discrete_factors,
     )
-    normalized_mutual_infos = mutual_infos / captured
+    normalized_mutual_infos = mutual_infos / (captured + epsilon)
     d_score = _disentanglement(normalized_mutual_infos)
     return d_score
 
 
 def dcii_c(
-    factors,
-    codes,
-    epsilon=1e-10,
-    mi_improved=True,
-    discrete_factors=False,
-    estimate_mi_codes_and_factor_by="mine",
-):
-    """
-    Compute completeness
+    factors: np.ndarray,
+    codes: np.ndarray,
+    discrete_factors: Union[List[bool], bool] = False,
+    estimator: str = "ksg",
+    estimate_mi_codes_and_factor_by: str = "mine",
+    epsilon: float = 1e-10,
+) -> float:
+    """Calculate DCII(C) score.
 
     Args:
-        factors: the real generative factors (batch_size, factor_dims).
-        codes: the latent codes (batch_size, code_dims).
+        factors (np.ndarray): [Shape (batch_size, n_factors)] The real generative factors.
+        codes (np.ndarray): [Shape (batch_size, n_codes)] The latent codes.
+        discrete_factors (Union[List[bool], bool]): It implies if each factor is discrete. Default: True.
+        estimator (str, optional): String in ["ksg", "bins", "mine"], each represents different method to estimate mutual information, see more in `disentangling.utils.mi`. Default: "ksg".
+        estimate_mi_codes_and_factor_by (str, optional): estimator of estimating the mutual information between codes $c$ and factor $z_j$, I(C; z_j). Default: "mine".
+        epsilon (float, optional): Epsilon (the very small number) used in calculation. Default: 1e-10.
+
     Returns:
-        score
+        score (float): Average completeness score.
     """
-    # mutual_info matrix (n_codes, n_factors)
-    estimator = "ksg" if mi_improved else "bins"
     mutual_infos = get_mutual_infos(
         codes,
         factors,
@@ -190,32 +256,33 @@ def dcii_c(
         estimator=estimator,
         discrete_factors=discrete_factors,
     )
-    normalized_mutual_infos = mutual_infos / captured
+    normalized_mutual_infos = mutual_infos / (captured + epsilon)
     c_score = _completeness(normalized_mutual_infos)
     return c_score
 
 
 def dcii_i(
-    factors,
-    codes,
-    epsilon=1e-10,
-    mi_improved=True,
-    discrete_factors=False,
-    estimate_mi_codes_and_factor_by="mine",
-):
-    """
-    Compute informativeness
+    factors: np.ndarray,
+    codes: np.ndarray,
+    discrete_factors: Union[List[bool], bool] = False,
+    estimator: str = "ksg",
+    estimate_mi_codes_and_factor_by: str = "mine",
+    epsilon: float = 1e-10,
+) -> float:
+    """Calculate DCII(I) score.
 
     Args:
-        factors: the real generative factors (batch_size, factor_dims).
-        codes: the latent codes (batch_size, code_dims).
+        factors (np.ndarray): [Shape (batch_size, n_factors)] The real generative factors.
+        codes (np.ndarray): [Shape (batch_size, n_codes)] The latent codes.
+        discrete_factors (Union[List[bool], bool]): It implies if each factor is discrete. Default: True.
+        estimator (str, optional): String in ["ksg", "bins", "mine"], each represents different method to estimate mutual information, see more in `disentangling.utils.mi`. Default: "ksg".
+        estimate_mi_codes_and_factor_by (str, optional): estimator of estimating the mutual information between codes $c$ and factor $z_j$, I(C; z_j). Default: "mine".
+        epsilon (float, optional): Epsilon (the very small number) used in calculation. Default: 1e-10.
+
     Returns:
-        score
+        score (float): Average informativeness score.
     """
     # discrete_codes?
-    # mutual_info matrix (n_codes, n_factors)
-
-    estimator = "ksg" if mi_improved else "bins"
     captured = get_captured_mis(
         codes,
         factors,

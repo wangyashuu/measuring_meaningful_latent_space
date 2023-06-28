@@ -1,21 +1,12 @@
+"""SAP score from `Variational Inference of Disentangled Latent Concepts from Unlabeled Observations <https://arxiv.org/abs/1711.00848>`.
+
+Part of Code is adapted from `disentanglement lib<https://github.com/google-research/disentanglement_lib/blob/86a644d4ed35c771560dc3360756363d35477357/disentanglement_lib/evaluation/metrics/sap_score.py>`.
+"""
+
+from typing import Union, List
 import numpy as np
 from sklearn.model_selection import train_test_split
 from xgboost import XGBClassifier
-
-"""
-Implementation of the SAP score.
-Based on "Variational Inference of Disentangled Latent Concepts from Unlabeled
-Observations" (https://openreview.net/forum?id=H1kG7GZAW), Section 3.
-
-Reference Implementation: https://github.com/google-research/disentanglement_lib/blob/86a644d4ed35c771560dc3360756363d35477357/disentanglement_lib/evaluation/metrics/sap_score.py
-
-"""
-
-
-def get_ad_hoc_model(model_name="XGBClassifier"):
-    if model_name == "XGBClassifier":
-        return XGBClassifier(tree_method="gpu_hist")
-    raise NotImplementedError(f"dci_ad_hoc_model model_name = {model_name}")
 
 
 def label_transformer(train_data):
@@ -32,13 +23,29 @@ def label_transformer(train_data):
 
 
 def get_score_matrix(
-    codes,
-    factors,
-    discrete_factors=False,
-    test_size=0.2,
-    random_state=None,
-    classifier_name="XGBClassifier",
-):
+    codes: np.ndarray,
+    factors: np.ndarray,
+    discrete_factors: Union[List[bool], bool] = True,
+    test_size: float = 0.2,
+    random_state: Union[float, None] = None,
+    **kwargs,
+) -> np.ndarray:
+
+    """Compute the relationship matrix for SAP.
+
+    Part of Code is adapted from `disentanglement lib<https://github.com/google-research/disentanglement_lib/blob/86a644d4ed35c771560dc3360756363d35477357/disentanglement_lib/evaluation/metrics/sap_score.py>`.
+
+    Args:
+        codes (np.ndarray): [Shape (batch_size, n_codes)] The latent codes.
+        factors (np.ndarray): [Shape (batch_size, n_factors)] The real generative factors.
+        discrete_factors (Union[List[bool], bool]): implies if each factor is discrete. Default: True.
+        test_size (float, optional): The rate of test samples, between 0 and 1. Default: 0.3.
+        random_state (Union[float, None], optional): Seed of random generator for sampling test data. Default: None.
+
+    Returns:
+        score matrix (np.ndarray): score matrix where ij entry represents the relationship between code i and factor j
+    """
+
     n_factors, n_codes = factors.shape[1], codes.shape[1]
     if type(discrete_factors) is not list:
         discrete_factors = [discrete_factors] * n_factors
@@ -58,7 +65,7 @@ def get_score_matrix(
             x_i = X_train[:, i]
             if discrete_factor:
                 x_i_test = X_test[:, i]
-                classifier = get_ad_hoc_model(model_name=classifier_name)
+                classifier = XGBClassifier(tree_method="gpu_hist")
                 classifier.fit(
                     x_i[:, np.newaxis].astype(np.float32), y_j_encoded
                 )
@@ -79,8 +86,25 @@ def get_score_matrix(
 
 
 def sap(
-    factors, codes, discrete_factors=False, test_size=0.2, random_state=None
-):
+    factors: np.ndarray,
+    codes: np.ndarray,
+    discrete_factors: Union[List[bool], bool] = True,
+    test_size: float = 0.2,
+    random_state: Union[float, None] = None,
+    **kwargs,
+) -> float:
+    """Compute SAP score.
+
+    Args:
+        codes (np.ndarray): [Shape (batch_size, n_codes)] The latent codes.
+        factors (np.ndarray): [Shape (batch_size, n_factors)] The real generative factors.
+        discrete_factors (Union[List[bool], bool]): implies if each factor is discrete. Default: True.
+        test_size (float, optional): The rate of test samples, between 0 and 1. Default: 0.3.
+        random_state (Union[float, None], optional): Seed of random generator for sampling test data. Default: None.
+
+    Returns:
+        score (float): SAP score
+    """
     matrix = get_score_matrix(
         codes,
         factors,

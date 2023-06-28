@@ -1,36 +1,14 @@
-from typing import Tuple
-
 import torch
-from torch import nn
+from torch import Tensor, nn
 
 from .vae import VAE
 from ..utils.loss import get_reconstruction_loss, get_kld_loss
 
-## https://github.com/ShengjiaZhao/MMD-Variational-Autoencoder/blob/master/mmd_vae.ipynb
-
-
-def imq_kernel(z1, z2, sigma, scales=[1.0]):
-    """
-    TODO: inverse multiquadric kernel
-    TODO: what is scale [0.1, 0.2, 0.5, 1.0, 2.0, 5, 10.0]
-    https://github.com/ShengjiaZhao/MMD-Variational-Autoencoder
-    """
-    n_latent_dim = z1.shape[1]
-    Cbase = 2.0 * n_latent_dim * sigma**2
-    k = 0
-    for scale in scales:
-        C = scale * Cbase
-        k += C / (
-            C + torch.norm(z1.unsqueeze(1) - z2.unsqueeze(0), dim=-1) ** 2
-        )
-
-    return k
-
 
 def rbf_kernel(z1, z2, sigma):
-    """
-    TODO: Radial basis function kernel
-    https://en.wikipedia.org/wiki/Radial_basis_function_kernel
+    """Compute the rbf kernel.
+
+    `Radial basis function kernel<https://en.wikipedia.org/wiki/Radial_basis_function_kernel>`
     """
     n_latent_dim = z1.shape[1]
     k = torch.exp(
@@ -51,35 +29,46 @@ def init_weights(m):
 
 
 class InfoVAE(VAE):
-    def __init__(
-        self,
-        encoder: nn.Module,
-        decoder: nn.Module,
-        encoder_output_shape: Tuple,
-        decoder_input_shape: Tuple,
-        latent_dim: int,
-    ) -> None:
-        super().__init__(
-            encoder,
-            decoder,
-            encoder_output_shape,
-            decoder_input_shape,
-            latent_dim,
-        )
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
         self.apply(init_weights)
 
 
 def compute_info_vae_loss(
-    input,
-    info_vae,
-    alpha,
-    lambd,
-    kernel_type="rbf",
-    kernel_sigma=1,
+    input: Tensor,
+    info_vae: InfoVAE,
+    alpha: float,
+    lambd: float,
+    kernel_type: str = "rbf",
+    kernel_sigma: float = 1,
     distribution="bernoulli",
     *args,
     **kwargs
 ) -> dict:
+    """Compute the InfoVAE loss.
+
+    Learning object of InfoVAE from `InfoVAE: Information Maximizing Variational Autoencoders <https://arxiv.org/abs/1706.02262>`
+    Reference official implementation `Tensorflow Implementation of MMD Variational Autoencoder <https://github.com/ShengjiaZhao/MMD-Variational-Autoencoder/blob/master/mmd_vae.ipynb>`
+
+    Args:
+        input (torch.Tensor): The input tensor
+        info_vae (InfoVAE): InfoVAE model that accept the shape same as the input.
+        alpha (float): Parameter for controlling the kld loss in the learning object of InfoVAE, where the kld loss factor is 1 - alpha).
+        lambd (float): Parameter for controlling the mmd loss in the learning object of InfoVAE, where the mmd loss factor is alpha + lambd - 1.
+        distribution (str, optional): String in ["bernoulli", "gaussian"] describe the distribution of input sample, which will effect the reconstruction loss calculation: "bernoulli" will use BCE loss, while "gaussian" will use MSE loss. Default: "bernoulli".
+        kernel_type (str, optional): String in ["rbf", "imq"] decribe the kernel type, currently only support rbf kernel. Default: "rbf".
+        kernel_sigma (float, optional): Parameter for computing the kernel. Default: 1.
+
+    Returns:
+        dict: the dict with loss name (string) as key and loss value (Tensor) as value, where
+            - "loss" represents the total loss,
+            - "reconstruction_loss" represents $\mathbb{E}_{\hat p(x)}[\mathbb{E}_{z \sim q_{\phi}(z|x)} [- \log p_{\theta}(x|z)]]$,
+            - "mutual_info_loss" represents $I_{q_\phi}(x;z)$,
+            - "tc_loss" represents $\textrm{TC}(q_\phi(z))$,
+            - "dimension_wise_kl_loss" represents $\sum_j D_{\textrm{KL}}(q_\phi(z_j) || p(z_j))$,
+            - "kld_loss" represents $D_{KL} ({q_{\phi}(z | x^{(i)})} | {p_{\theta}(z)})$.
+    """
+
     # TODO: refactor
     # kld_loss_factor = 1 - alpha
     # mmd_loss_factor = gamma - (1-alpha)
