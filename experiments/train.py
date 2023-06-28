@@ -1,13 +1,12 @@
 from pathlib import Path
 import urllib.parse
-
-import torch
 from torch.utils.data import DataLoader
+
 from .utils.solver import Solver
 from .utils.logger import WandbLogger
-from .utils.ddp import ddp_dataloader, ddp_model, ddp_run
+from .utils.ddp import ddp_run
 from .utils.seed_everything import seed_everything
-from .test import samples, reconstructs, run_metrics, test_batch
+from .test import test_batch, get_on_test_end
 
 from .utils.create_from_config import (
     create_datasets,
@@ -17,7 +16,11 @@ from .utils.create_from_config import (
     create_optimizer,
     create_scheduler,
     create_metrics,
+    create_input_shape,
 )
+
+
+project = "innvariant-representations"
 
 
 def init_loss(model, config):
@@ -33,9 +36,10 @@ def init_loss(model, config):
 
 
 def init_main(config):
+    input_shape = create_input_shape(config.data.name)
     main_model = create_model(
         model_name=config.model_name,
-        input_shape=config.data.input_shape,
+        input_shape=input_shape,
         net_params=config.net_params,
         latent_dim=config.latent_dim,
     )
@@ -74,54 +78,38 @@ def init(config):
 
 def run_train(rank, config):
     seed_everything(config.seed)
+    group = config.model_name
     name = urllib.parse.urlencode(config.loss_kwargs) or "empty"
+
     output_dir = (
-        Path(config.output_dir) / str(config.seed) / config.model_name / name
+        Path(config.output_dir)
+        / str(config.data.name)
+        / str(config.seed)
+        / group
+        / name
     )
     output_dir.mkdir(parents=True, exist_ok=True)
     models, optimizers, schedulers, loss_calcs = init(config)
+
     train_set, val_set = create_datasets(config.data)
     train_loader = DataLoader(
         train_set, **config.dataloader.train, pin_memory=True
     )
     val_loader = DataLoader(val_set, **config.dataloader.val, pin_memory=True)
-    discrete_factors = val_set.dataset.discrete_factors
-    if rank >= 0:
-        train_loader = ddp_dataloader(train_loader)
-        val_loader = ddp_dataloader(val_loader)
-        models = [ddp_model(m, rank) for m in models]
 
-    metric_funcs = create_metrics(config.metrics)
-
-    def on_test_end(collated, trainer):
-        y = collated[0].cpu().numpy()
-        y_hat = collated[1].cpu().numpy()
-        metrics = run_metrics(
-            y,
-            y_hat,
-            metric_funcs,
-            discrete_factors=discrete_factors,
-        )
-        vae = trainer.models[0]
-        if trainer._is_ddp():
-            vae = vae.module
-        images = {
-            **samples(vae, device=trainer.device),
-            **reconstructs(vae, val_loader.dataset, device=trainer.device),
-        }
-        # trainer.log(*check_correlation(y, y_hat))
-        return {**images, **metrics}
+    on_test_end = get_on_test_end(create_metrics(config.metrics))
 
     logger = WandbLogger(
         is_on_master=rank < 1, n_steps_log_every=config.n_steps_log_every
     )
     logger.start(
-        project="innvariant-representations",
-        group=config.model_name,
+        project=project,
+        group=group,
         name=name,
         dir=output_dir,
         config=config,
     )
+
     trainer = Solver(
         models,
         optimizers=optimizers,

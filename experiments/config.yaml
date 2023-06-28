@@ -2,7 +2,17 @@ seed: 1
 output_dir: output
 latent_dim: 10
 n_epochs: 128
-metrics: ["z_min_var", "sap",  "mig", "mig_sup", "dci", "dcimig", "modularity", "dcii"]
+metrics:
+    [
+        "z_min_var",
+        "sap",
+        "mig",
+        "mig_sup",
+        "dci",
+        "dcimig",
+        "modularity",
+        "dcii",
+    ]
 
 n_steps_log_every: 1600
 n_epochs_test_every: 0
@@ -10,46 +20,42 @@ n_epochs_save_every: 8
 # saved_state: "/root/innvariant-representations/output/checkpoints/epoch=99.ckpt"
 
 net_params:
-  - net_type: "cnn"
-    hiddens: [32, 32, 64, 64]
-  - net_type: "fc"
-    hiddens: [256]
+    - net_type: "cnn"
+      hiddens: [32, 32, 64, 64]
+    - net_type: "fc"
+      hiddens: [256]
 
 data:
-  input_shape: [1, 64, 64]
-  train_rate: 0.9
-  random_state: 1
-  name: "dSprites"
-  # includes:
-  #   3: [0, 0.8]
-  #   4: [0, 0.8]
-# data:
-#   name: "CelebA"
-#   input_shape: [3, 64, 64]
+    train_rate: 0.9
+    random_state: 1
+    name: "dSprites"
+    # includes:
+    #   3: [0, 0.8]
+    #   4: [0, 0.8]
 
 dataloader:
-  train:
-    batch_size: 64
-    shuffle: true
-    num_workers: 8
-  val:
-    batch_size: 256
-    num_workers: 8
+    train:
+        batch_size: 64
+        shuffle: true
+        num_workers: 8
+    val:
+        batch_size: 256
+        num_workers: 8
 
 optimizer:
-  name: "Adam"
-  lr: 0.0001
+    name: "Adam"
+    lr: 0.0001
 
 # optimizer:
-#   name: "AdamW"
-#   lr: 0.0001
-#   weight_decay: 0
+#     name: "AdamW"
+#     lr: 0.0001
+#     weight_decay: 0
 
 # scheduler:
-#   name: "ExponentialLR"
-#   gamma: 0.95
+#     name: "ExponentialLR"
+#     gamma: 0.95
 
 # scheduler:
-#   name: "CosineAnnealingLR"
-#   T_max: 4
-#   eta_min: 0.00005
+#     name: "CosineAnnealingLR"
+#     T_max: 4
+#     eta_min: 0.00005

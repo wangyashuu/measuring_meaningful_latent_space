@@ -1,4 +1,5 @@
-import numpy as np
+import wandb
+
 from disentangling.metrics import (
     z_min_var,
     mig,
@@ -10,7 +11,6 @@ from disentangling.metrics import (
     dcii,
 )
 from disentangling.metrics.utils import get_scores
-import wandb
 
 from experiments.utils.seed_everything import seed_everything
 
@@ -27,7 +27,7 @@ class Logger:
 
 
 def test_metrics(n_times):
-    metrics = [dcii]
+    metrics = [z_min_var, mig, mig_sup, dcimig, sap, modularity, dci, dcii]
     cases = [
         [False, False, False],
         [False, False, True],
@@ -42,11 +42,10 @@ def test_metrics(n_times):
     for i in range(n_times):
         seed_everything(i)
         for c in cases:
-            # c_name = ''.join((np.array(c).astype(int).astype(str)))
             logger.start(config=dict(case=c, seed=i))
             all_results = {}
             for fn in metrics:
-                res = get_scores(fn, *c)
+                res = get_scores(fn, *c, discrete_factors=True)
                 all_results.update(
                     {f"{fn.__name__}__{k}": res[k] for k in res}
                     if type(res) is dict
