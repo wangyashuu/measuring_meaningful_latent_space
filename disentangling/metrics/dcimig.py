@@ -1,4 +1,4 @@
-"""3CharM, aka DCIMIG, from `How to Not Measure Disentanglement<https://arxiv.org/abs/1910.05587>`.
+"""3CharM, aka DCIMIG, from `How to Not Measure Disentanglement <https://arxiv.org/abs/1910.05587>`.
 
 Part of code is adapted from `Supervised Disentanglement Metrics <https://github.com/ubisoft/ubisoft-laforge-disentanglement-metrics>`.
 """

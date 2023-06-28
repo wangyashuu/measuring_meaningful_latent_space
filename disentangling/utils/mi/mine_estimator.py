@@ -1,42 +1,28 @@
+"""Implementation of mutual information estimator based on `MINE: Mutual Information Neural Estimation <https://arxiv.org/abs/1801.04062>`
+
+Related Implementation:
+1. https://github.com/MasanoriYamada/Mine_pytorch/blob/master/mine.ipynb
+2. https://github.com/sungyubkim/MINE-Mutual-Information-Neural-Estimation-/blob/master/MINE.ipynb
+3. https://github.com/gtegner/mine-pytorch/blob/master/mine/models/mine.py#L49
+4. https://github.com/mboudiaf/Mutual-Information-Variational-Bounds
+"""
+from typing import Tuple, List
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset
-from sklearn.preprocessing import scale
 import numpy as np
 
 
-###
-# references:
-# 1. https://github.com/MasanoriYamada/Mine_pytorch/blob/master/mine.ipynb
-# 2. https://github.com/sungyubkim/MINE-Mutual-Information-Neural-Estimation-/blob/master/MINE.ipynb
-# 3. https://github.com/gtegner/mine-pytorch/blob/master/mine/models/mine.py#L49
-# 4. https://github.com/mboudiaf/Mutual-Information-Variational-Bounds
-# 5. https://github.com/burklight/MINE-PyTorch/blob/master/src/mine.py
-###
+from .funcs import is_1d, atleast_2d, default_transform
 
 
-def atleast_2d(arr):
-    if torch.is_tensor(arr):
-        arr = arr.cpu().numpy()
-    if len(arr.shape) == 1:
-        return arr.reshape(arr.shape[0], 1)
-    return arr
-
-
-def hardly_decrease(history, patience=3, min_delta=0):
+def hardly_descrease(history, patience=3, min_delta=0):
+    """Decide if the history is hardly descrease."""
     history = np.array(history)
     if len(history) > patience:
         wait_idx = np.argmax((history - np.min(history)) <= min_delta)
         return len(history) - wait_idx > patience
     return False
-
-
-def default_transform(X):
-    return scale(X, with_mean=False)
-
-
-def is_1d(x):
-    return len(x.shape) <= 1 or (len(x.shape) == 2 and x.shape[1] == 1)
 
 
 class SimpleDataset(Dataset):
@@ -49,16 +35,6 @@ class SimpleDataset(Dataset):
     def __getitem__(self, idx):
         x, y = self.data
         return x[idx], y[idx]
-
-
-def init_weights(m):
-    if (
-        isinstance(m, nn.Linear)
-        or isinstance(m, nn.ConvTranspose2d)
-        or isinstance(m, nn.Conv2d)
-    ):
-        torch.nn.init.xavier_normal_(m.weight)
-        m.bias.data.fill_(0.01)
 
 
 class Net(nn.Module):
@@ -76,7 +52,6 @@ class Net(nn.Module):
             nn.ReLU(),
             nn.Linear(n_hidden_dims, 1),
         )
-        # self.apply(init_weights)
 
     def forward(self, inputs):
         outs = self.backbone(inputs)
@@ -84,6 +59,8 @@ class Net(nn.Module):
 
 
 class ema_log_mean_exp(torch.autograd.Function):
+    """EMA implementation for MINE paper 3.2 Correcting the bias from the stochastic gradients."""
+
     # val: t_marginal.exp().mean().log()
     # grad: t_marginal.exp() / t_marginal.exp().mean() / t_marginal.shape[0]
     # ema grad: t_marginal.exp() / ema_et / t_marginal.shape[0]
@@ -105,6 +82,7 @@ def ema(val, val_mean, ema_rate=0.01):
 
 
 def mine(x, y, net):
+    """Estimate mutual information between x and y, using net."""
     y_marginal = y[torch.randperm(y.shape[0])]
     t = net(torch.hstack([x, y]))
     t_marginal = net(torch.hstack([x, y_marginal]))
@@ -112,32 +90,33 @@ def mine(x, y, net):
     return mi, t, t_marginal
 
 
-def estimate_mutual_information(x, y, **kwargs):
-    x = atleast_2d(x).astype("float32")
-    y = atleast_2d(y).astype("float32")
-    if is_1d(x):
-        x = default_transform(x)
-    if is_1d(y):
-        y = default_transform(y)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    net = Net(input_shape=(x.shape[1] + y.shape[1]))
-    net.to(device)
-    mi = train_mine(net, data=(x, y), **kwargs)
-    return mi
-
-
 def train_mine(
-    net,
-    data,
-    loss_type="mi",
-    n_epochs=200,
-    batch_size=256,
-    ema_rate=0.01,
-    lr=1e-3,
-    early_stop_min_delta=0.05,
-    early_stop_patience=5,
-):
+    net: nn.Module,
+    data: Tuple,
+    loss_type: str = "mi",
+    ema_rate: float = 0.01,
+    n_epochs: int = 200,
+    batch_size: int = 256,
+    lr: float = 1e-3,
+    early_stop_min_delta: float = 0.05,
+    early_stop_patience: int = 5,
+) -> List[float]:
+    """Train the net with mine loss.
 
+    Args:
+        net (nn.Module): The target model.
+        data (Tuple[np.ndarray, np.ndarray]): Two cluster date.
+        loss_type (str, optional): String in ["mi", "fdiv"] describe the different loss type of mine loss. Default: "mi".
+        ema_rate (float, optional): Hyperparameter of training. Default: 0.01.
+        n_epochs (int, optional): Hyperparameter of training. Default: 200.
+        batch_size (int, optional): Hyperparameter of training. Default: 256.
+        ema_rate (float, optional): Hyperparameter of training. Default: 1e-3.
+        early_stop_min_delta (float, optional): Hyperparameter of training. Default: 0.05.
+        early_stop_patience (int, optional): Hyperparameter of training. Default: 5.
+
+    Returns:
+        List[float]: A List where each element is history loss.
+    """
     data = (torch.tensor(data[0]), torch.tensor(data[1]))
     dataloader = DataLoader(
         SimpleDataset(data),
@@ -146,11 +125,9 @@ def train_mine(
         shuffle=True,
     )
     optimizer = torch.optim.Adam(net.parameters(), lr=lr)
-    # optimizer = torch.optim.SGD(net.parameters(), lr=lr, momentum=0.95)
     ema_et = 1.0
     device = next(net.parameters()).device
     history = []
-    # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=4)
     for i in range(n_epochs):
         for i_batch, (x, y) in enumerate(dataloader):
             mi, t, t_marginal = mine(x.to(device), y.to(device), net)
@@ -171,10 +148,25 @@ def train_mine(
         est_mi = est_mi.cpu().numpy()
         history.append(-est_mi)
         if early_stop_patience > 0:
-            if hardly_decrease(
+            if hardly_descrease(
                 history,
                 min_delta=early_stop_min_delta,
                 patience=early_stop_patience,
             ):
                 break
     return -np.min(history[-early_stop_patience:])
+
+
+def estimate_mutual_info(x, y, **kwargs):
+    """Estimate mutual information between x and y by mine"""
+    x = atleast_2d(x).astype("float32")
+    y = atleast_2d(y).astype("float32")
+    if is_1d(x):
+        x = default_transform(x)
+    if is_1d(y):
+        y = default_transform(y)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    net = Net(input_shape=(x.shape[1] + y.shape[1]))
+    net.to(device)
+    mi = train_mine(net, data=(x, y), **kwargs)
+    return mi
